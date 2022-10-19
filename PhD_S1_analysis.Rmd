@@ -1,0 +1,3697 @@
+---
+title: "Normative Data for a Multi-faceted Concussion Assessment"
+author: "Róisín Leahy"
+date: "11/27/2021"
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=FALSE)
+
+here::i_am("PhD_S1_analysis.Rmd")
+
+lib<-c("tidyverse","plyr","table1","flextable","officer","janitor","DescTools","patchwork","ggmosaic","ggsci","knitr","papeR","rstatix","ggpubr","effectsize","ggstatsplot")
+lapply(lib,require,character.only=TRUE)
+```
+# Normative Data Study
+
+* 145 participants have a full baseline assessment
+* 7 participants have a partial baseline assessment
+  + 3 have ImPACT and clinical test data but no questionnaires
+  + 4 have ImPACT and questionnaire data but no clinical tests
+```{r, include=FALSE}
+
+normative_dat<-readRDS("normative_dat.rds")
+glimpse(normative_dat)
+```
+## 1. Aims
+
+Primary:
+
+1. To generate normative data for LGF players on a multifaceted concussion assessment, stratified by (i) age, (ii) level of play, and (iii) concussion history
+2. To examine differences in baseline clinical test and health questionnaire outcomes based on (i) age, (ii) level of play, and (iii) concussion history
+
+Secondary:
+
+3. To examine the underlying factor structure of a multifaceted concussion assessment in players without concussion
+4. To examine whether self-reported mood and sleep quality relate to objective measures of cognitive function in players without SRC
+
+### 1.1. Analysis:
+
+#### Aim 1: Present normative data
+
+1. Present means and standard deviations, medians and IQRs, and ranges for all participants, and stratified by (i) age (adolescent/adult), (ii) level of play (elite/non-elite), (iii) concussion history (yes/no)
+2. Present percentiles for all participants and stratified by (i) age, (ii) level of play, (iii) concussion history
+3. Calculate multivariate base rates of low scores on (i) ImPACT
+4. Present base rates of suggested clinical cut-off scores for concussion-specific (e.g. VOMS) and general measures (e.g PHQ9, GAD7, PSQI, MIDAS)
+5. Describe the prevalence of baseline symptoms, as measured by the SCAT5 GSC
+
+#### Aim 2: Examine differences in outcomes between subgroups
+
+6. Examine differences in clinical test and health questionnaire outcomes based on (i) age, (ii) level of play, and (iii) concussion history
+7. Examine differences in baseline symptoms between (i) adults and adolescents, and (ii) participants with and without a history of diagnosed concussion
+
+### 1.2. Visualisation:
+
+1. Display the proportion of participants meeting clinical cut-off criteria for VOMS, PHQ-9, GAD-7 and MIDAS
+2. Compare the proportion of participants meeting clinical cut-off criteria between (i) adolescents and adults, (ii) elite and non-elite players, and (iii) players with and without a previous diagnosed concussion
+2. Display baseline symptom prevalence (SCAT5 GSC)
+3. Show differences in outcomes by (i) age, (ii) level of play, and (iii) concussion history 
+
+## 2. Inclusion of Participants
+
+### 2.1. Concussion in Previous 3 Months
+
+Participants who reported sustaining a diagnosed or suspected, undiagnosed concussion within the 3 months prior to the baseline assessment have been removed from the dataset. Participants with missing data on concussion history have also been removed. 
+```{r Concussion in previous 3 months}
+
+normative_dat$ConHis_3Month<-fct_relevel(normative_dat$ConHis_3Month,"Yes","No","NR")
+
+Con_3Month<-normative_dat %>% 
+  tabyl(ConHis_3Month) %>%
+  adorn_pct_formatting()
+Con_3Month %>% kable()
+
+normative_dat<-normative_dat %>%
+  filter(ConHis_3Month!="Yes")
+```
+### 2.2. ImPACT Validity
+```{r ImPACT Validity}
+
+ImPACT_Valid<-normative_dat %>%
+  tabyl(ImPACT_Valid_Pre) %>%
+  adorn_pct_formatting(digits=2)
+
+##Consider invalid responses as NA
+normative_dat<-normative_dat %>%
+  mutate(across(c(ImPACT_Verbal_Mem_Score_Pre:ImPACT_Impulse_Control_Score_Pre),~if_else(ImPACT_Valid_Pre=="Invalid",as.numeric(NA),.)))
+```
+Invalid ImPACT scores are considered NA. `r ImPACT_Valid$n[ImPACT_Valid$ImPACT_Valid_Pre=="Invalid"]` participants had invalid ImPACT scores.
+
+## 3. Participant Demographics
+```{r Participant demographics, results='hide', warning=FALSE}
+
+##Create new age variable
+normative_dat<-normative_dat %>%
+  mutate(Age_Group=if_else(Age<18,"Adolescent","Adult")) %>%
+  relocate(Age_Group,.after="Age")
+normative_dat$Age_Group<-as.factor(normative_dat$Age_Group)
+
+##Relabel variables
+table1::label(normative_dat$Age)<-"Age, median (IQR)"
+table1::label(normative_dat$Height_cm)<-"Height in cm, median (IQR)"
+table1::label(normative_dat$Weight_kg)<-"Body mass in kg, median (IQR)"
+table1::label(normative_dat$Current_Ed)<-"Current level of education, % (n)"
+table1::label(normative_dat$Years_Club)<-"Number of years playing, median (IQR)"
+table1::label(normative_dat$Pos_Club)<-"Playing position, % (n)"
+table1::label(normative_dat$ConHis_yes_no)<-"History of suspected or diagnosed concussion, % (n)"
+table1::label(normative_dat$ConHis_Diag)<-"History of diagnosed concussion, % (n)"
+table1::label(normative_dat$Med_His_Headache)<-"History of diagnosed headache, % (n)"
+table1::label(normative_dat$Med_His_Migraine)<-"History of diagnosed migraine, % (n)"
+table1::label(normative_dat$Med_His_ADHD)<-"History of diagnosed attention deficit hyperactivity disorder, % (n)"
+table1::label(normative_dat$Med_His_LD)<-"History of diagnosed learning disorder, % (n)"
+table1::label(normative_dat$Med_His_Mood)<-"History of diagnosed mood disorder, % (n)"
+table1::label(normative_dat$Med_His_Anx)<-"History of diagnosed anxiety disorder, % (n)"
+table1::label(normative_dat$Med_His_Sleep)<-"History of diagnosed sleep disorder, % (n)"
+
+####Recode variables####
+##Age2
+normative_dat<-normative_dat %>%
+  mutate(Age2=factor(Age))
+
+##Level of play
+normative_dat$County<-fct_recode(normative_dat$County,"Elite"="Yes","Non-Elite"="No")
+normative_dat$County<-fct_relevel(normative_dat$County,"Elite","Non-Elite")
+
+##BMI
+normative_dat<-normative_dat %>%
+  mutate(BMI=Weight_kg/(Height_cm/100)^2)
+
+##Education
+normative_dat$Current_Ed<-fct_recode(normative_dat$Current_Ed,
+                    "Completed undergraduate degree"="Finished undergrad",
+                    "Completed final school exams"="Undergrad",
+                    "Post junior cert"="Leaving cert",
+                    "Pre junior cert"="Junior cert",
+                    "Other"="Other")
+normative_dat$Current_Ed<-fct_relevel(normative_dat$Current_Ed,"Completed undergraduate degree","Completed final school exams","Post junior cert","Pre junior cert","Other")
+
+##Playing position
+normative_dat$Pos_Club<-fct_relevel(normative_dat$Pos_Club, "Forward","Midfield","Back","Goalkeeper","Multiple")
+
+##Participation in other sport
+normative_dat$Other_Sport<-fct_relevel(normative_dat$Other_Sport,"Yes","No")
+
+normative_dat<-normative_dat %>%
+  mutate(multi_sport=case_when(Other_Sport=="No" ~ "None",
+                               Other_Sport=="Yes" & Other_Sport_Type_2=="NR" ~ "One",
+                               Other_Sport=="Yes" & Other_Sport_Type_3=="NR" ~ "Two",
+                               TRUE ~ "Three"))
+normative_dat$multi_sport<-fct_relevel(normative_dat$multi_sport,"None","One","Two","Three")
+
+##Medical history
+med_his_fun<-function(x){fct_relevel(x,"Yes","No")}
+
+normative_dat$ConHis_Diag<-med_his_fun(normative_dat$ConHis_Diag)
+normative_dat$Med_His_Headache<-med_his_fun(normative_dat$Med_His_Headache)
+normative_dat$Med_His_Migraine<-med_his_fun(normative_dat$Med_His_Migraine)
+normative_dat$Med_His_ADHD<-med_his_fun(normative_dat$Med_His_ADHD)
+normative_dat$Med_His_LD<-med_his_fun(normative_dat$Med_His_LD)
+normative_dat$Med_His_Mood<-med_his_fun(normative_dat$Med_His_Mood)
+normative_dat$Med_His_Anx<-med_his_fun(normative_dat$Med_His_Anx)
+normative_dat$Med_His_Sleep<-med_his_fun(normative_dat$Med_His_Sleep)
+levels(normative_dat$Med_His_Sleep)<-c("Yes","No")
+```
+### 3.1. Visualisation of Participant Demographic Characteristics
+```{r Visualisation of participant demographics, out.width="75%", warning=FALSE}
+
+##Age 
+gghistogram(normative_dat,x="Age",y="..count..",bins=12,add_density=TRUE,size=1,fill="DarkOrchid")
+##Height
+gghistogram(normative_dat,x="Height_cm",y="..count..",bins=12,add_density=TRUE,size=1,fill="DarkOrchid")
+##Weight
+gghistogram(normative_dat,x="Weight_kg",y="..count..",bins=12,add_density=TRUE,size=1,fill="DarkOrchid")
+##Current education
+ggplot(normative_dat,aes(x=Current_Ed)) + geom_bar(stat="count",fill="cyan3",colour="black") + coord_flip() + theme_classic()
+##Years playing
+gghistogram(normative_dat,x="Years_Club",y="..count..",bins=12,add_density=TRUE,size=1,fill="DarkOrchid")
+##Playing position
+ggplot(normative_dat,aes(x=Pos_Club)) + geom_bar(stat="count",fill="cyan3",colour="black") + theme_classic() 
+##History of suspected or diagnosed concussion
+ggplot(normative_dat,aes(x=ConHis_yes_no)) + geom_bar(stat="count",fill="palegreen",colour="black") + theme_classic() 
+##History of diagnosed concussion
+ggplot(normative_dat,aes(x=ConHis_Diag)) + geom_bar(stat="count",fill="palegreen",colour="black") + theme_classic() 
+##History of diagnosed headache
+ggplot(normative_dat,aes(x=Med_His_Headache)) + geom_bar(stat="count",fill="darkorange",colour="black") + theme_classic() 
+##History of diagnosed migraine
+ggplot(normative_dat,aes(x=Med_His_Migraine)) + geom_bar(stat="count",fill="darkorange",colour="black") + theme_classic() 
+##History of diagnosed ADHD
+ggplot(normative_dat,aes(x=Med_His_ADHD)) + geom_bar(stat="count",fill="darkorange",colour="black") + theme_classic() 
+##History of diagnosed LD
+ggplot(normative_dat,aes(x=Med_His_LD)) + geom_bar(stat="count",fill="darkorange",colour="black") + theme_classic() 
+##History of diagnosed mood disorder
+ggplot(normative_dat,aes(x=Med_His_Mood)) + geom_bar(stat="count",fill="darkorange",colour="black") + theme_classic() 
+##History of diagnosed anxiety disorder
+ggplot(normative_dat,aes(x=Med_His_Anx)) + geom_bar(stat="count",fill="darkorange",colour="black") + theme_classic() 
+##History of diagnosed sleep disorder
+ggplot(normative_dat,aes(x=Med_His_Sleep)) + geom_bar(stat="count",fill="darkorange",colour="black") + theme_classic()
+```
+
+### 3.2. Tables of Demographic Characteristics
+```{r Tables of participant demographics}
+
+Age_t1<-normative_dat %>% 
+  filter(Age_Group=="Adolescent") %>%
+  tabyl(Age2) %>%
+  adorn_totals() %>%
+  adorn_pct_formatting()
+Age_t1
+
+render.cont<-function(x){with(stats.apply.rounding(stats.default(x), digits=2), c("Median (IQR)"=sprintf("%s (%s)", MEDIAN, IQR)))}
+render.categor<-function(x){c("",sapply(stats.default(x),function(y) with(y,sprintf("%0.1f%% (%d)",PCT, FREQ))))}
+```
+#### 3.2.1. Demographic Characteristics Stratified by Age
+```{r Demographic tables by age}
+
+##Create demographic table stratified by age group
+dem_t1<-table1(~ Age + County + Height_cm + Weight_kg + BMI + Current_Ed + Years_Club + Pos_Club + multi_sport + ConHis_yes_no + ConHis_Diag + Med_His_Headache + Med_His_Migraine + Med_His_ADHD + Med_His_LD + Med_His_Mood + Med_His_Anx + Med_His_Sleep | Age_Group, data=normative_dat, overall="Total Sample",
+               render.continuous=render.cont,
+               render.categorical=render.categor)
+
+set_flextable_defaults(font.family="Times",font.size=8,text.align="center",border.color="black")
+dem_ft1<-t1flex(dem_t1)
+dem_ft1<-italic(dem_ft1,part="header")
+dem_ft1<-bold(dem_ft1,part="header")
+dem_ft1<-border_remove(dem_ft1)
+dem_ft1<-hline_top(dem_ft1,border=fp_border(width=0.5))
+dem_ft1<-height(dem_ft1,height=0.2,part="body")
+dem_ft1<-hrule(dem_ft1,rule="exact")
+dem_ft1
+
+print(dem_ft1,preview="docx")
+```
+#### 3.2.2. Demographic Characteristics Stratified by Age and Level
+```{r Demographic tables by level of play}
+
+##Create table by level of play
+dem_t2<-table1(~ Age + Height_cm + Weight_kg + BMI + Current_Ed + Years_Club + Pos_Club + multi_sport + ConHis_yes_no + ConHis_Diag + Med_His_Headache + Med_His_Migraine + Med_His_ADHD + Med_His_LD + Med_His_Mood + Med_His_Anx + Med_His_Sleep | County, data=normative_dat, overall="Total Sample",
+               render.continuous=render.cont,
+               render.categorical=render.categor)
+
+set_flextable_defaults(font.family="Times",font.size=8,text.align="center",border.color="black")
+dem_ft2<-t1flex(dem_t2)
+dem_ft2<-italic(dem_ft2,part="header")
+dem_ft2<-bold(dem_ft2,part="header")
+dem_ft2<-border_remove(dem_ft2)
+dem_ft2<-hline_top(dem_ft2,border=fp_border(width=0.5))
+dem_ft2<-height(dem_ft2,height=0.2,part="body")
+dem_ft2<-hrule(dem_ft2,rule="exact")
+dem_ft2
+
+print(dem_ft2,preview="docx")
+```
+## 4. Exploratory Data Analysis
+
+### 4.1. Clinical Tests
+```{r Exploratory analysis of clinical test outcomes}
+
+####Calculate clinical cutoff scores####
+##ImPACT##
+##No consensus on cutoff scores
+
+##SCAT5##
+##No consensus on cutoff scores
+##Calculate TG pass/fail
+normative_dat<-normative_dat %>%
+  mutate(SCAT5_Neuro_TG_Pass=if_else(SCAT5_Neuro_Time_TG_Pre==0,"Fail","Pass"))
+
+##VOMS##
+##Change of 2 on any item or NPC of 0.5 indicates a positive test
+##Calculate cutoff for each test
+normative_dat<-normative_dat %>%
+  mutate(VOMS_SP=if_else(VOMS_SP_Tot_Pre>=2,"Positive","Negative"),
+         VOMS_H_Sacc=if_else(VOMS_Sacc_H_Tot_Pre>=2,"Positive","Negative"),
+         VOMS_V_Sacc=if_else(VOMS_Sacc_V_Tot_Pre>=2,"Positive","Negative"),
+         VOMS_Converg=if_else(VOMS_Converg_Tot_Pre>=2,"Positive","Negative"),
+         VOMS_H_VOR=if_else(VOMS_VOR_H_Tot_Pre>=2,"Positive","Negative"),
+         VOMS_V_VOR=if_else(VOMS_VOR_V_Tot_Pre>=2,"Positive","Negative"),
+         VOMS_VMS=if_else(VOMS_VMS_Tot_Pre>=2,"Positive","Negative"),
+         VOMS_NPC=if_else(VOMS_NPC_Pre>=5,"Positive","Negative"))
+normative_dat<-normative_dat %>%
+  mutate(across(VOMS_SP:VOMS_NPC,as.factor))
+
+##Calculate overall cutoffs
+normative_dat<-normative_dat %>%
+  mutate(VOMS_Cutoff=if_else(VOMS_SP_Tot_Pre>=2 | VOMS_Sacc_H_Tot_Pre>=2 | VOMS_Sacc_V_Tot_Pre>=2 | VOMS_Converg_Tot_Pre>=2 | VOMS_VOR_H_Tot_Pre>=2 | VOMS_VOR_V_Tot_Pre>=2 | VOMS_VMS_Tot_Pre>=2 | VOMS_NPC_Pre>=0.5,"Positive (>=2)","Negative (<2)"))
+normative_dat$VOMS_Cutoff<-factor(normative_dat$VOMS_Cutoff)
+
+####Calculate normalised neck strength####
+normative_dat<-normative_dat %>%
+  mutate(Neck_Flex_norm=(Neck_Flex_Avg_Pre/Weight_kg),
+         Neck_Ext_norm=(Neck_Ext_Avg_Pre/Weight_kg),
+         Neck_LatFlex_D_norm=(Neck_LatFlex_D_Avg_Pre/Weight_kg),
+         Neck_LatFlex_ND_norm=(Neck_LatFlex_ND_Avg_Pre/Weight_kg),
+         Neck_SCM_D_norm=(Neck_SCM_D_Avg_Pre/Weight_kg),
+         Neck_SCM_ND_norm=(Neck_SCM_ND_Avg_Pre/Weight_kg))
+```
+### 4.1.1.Data Dictionary for Clinical Test Outcomes
+```{r Data dictionary for clinical tests}
+
+ct_vars_df<-data.frame(Outcome=c("Verbal Memory Score","Visual Memory Score","Visual Motor Score","Reaction Time","Post-Concussion Symptom Score","Total Symptom Score","Symptom Severity Score","Orientation","Immediate Memory","Digits Backwards","Months Backwards","Concentration","Delayed Memory","Finger-to-nose Time","Tandem Gait Time","mBESS Total Score","mBESS Double-Leg Score","mBESS Single-Leg Score","mBESS Tandem Stance Score","Horizontal Saccades Score","Vertical Saccades Score","Convergence Score","Near Point of Convergence","Horizontal VOR Score","Vertical VOR Score","Visual Motion Sensitivity Score","VOMS Cutoff","Neck Flexion","Neck Extension","Dominant Side Lateral Neck Flexion","Non-Dominant Side Lateral Neck Flexion","Dominant Side Neck Rotation","Non-Dominant Side Neck Rotation"),
+                                 Test=c("ImPACT","ImPACT","ImPACT","ImPACT","ImPACT","SCAT5 GSC","SCAT5 GSC","SCAT5 SAC","SCAT5 SAC","SCAT5 SAC","SCAT5 SAC","SCAT5 SAC","SCAT5 SAC","SCAT5 Neuro","SCAT5 Neuro","SCAT5 mBESS","SCAT5 mBESS","SCAT5 mBESS","SCAT5 mBESS","VOMS","VOMS","VOMS","VOMS","VOMS","VOMS","VOMS","VOMS","Dynamometry","Dynamometry","Dynamometry","Dynamometry","Dynamometry","Dynamometry"), 
+                       VarType=c("Numeric","Numeric","Numeric","Numeric","Numeric","Numeric","Numeric","Discrete","Numeric","Numeric","Numeric","Discrete","Numeric","Numeric","Numeric","Numeric","Numeric","Numeric","Numeric","Numeric","Numeric","Numeric","Numeric","Numeric","Numeric","Numeric","Categorical","Numeric","Numeric","Numeric","Numeric","Numeric","Numeric"),
+                      Var=c("0-100","0-100","","0+","0,1,2...154","0,1,2...22","0,1,2...154","0,1,2...5","0,1,2...30","0,1,2,3,4","0,1","0,1,2...5","0,1,2...10","0+","0+","0,1,2...30","0,1,2...10","0,1,2...10","0,1,2...10","0,1,2...40","0,1,2...40","0,1,2...40","0,1,2...40","0,1,2...40","0,1,2...40","0,1,2...40","Negative, Positive","0+","0+","0+","0+","0+","0+"))
+kable(ct_vars_df)
+```
+### 4.1.2. Plot Clinical Test Outcomes
+```{r Plot clinical test outcomes, results='hide'}
+
+##ImPACT
+Desc(normative_dat$ImPACT_Verbal_Mem_Score_Pre, main="Verbal Memory", plotit=TRUE)
+Desc(normative_dat$ImPACT_Visual_Mem_Score_Pre, main="Visual Memory", plotit=TRUE)
+Desc(normative_dat$ImPACT_Visual_Motor_Score_Pre, main="Visual Motor Score", plotit=TRUE)
+Desc(normative_dat$ImPACT_Reaction_Time_Score_Pre, main="Reaction Time", plotit=TRUE)
+Desc(normative_dat$ImPACT_Impulse_Control_Score_Pre, main="Impulse Control", plotit=TRUE)
+
+##SCAT5
+Desc(normative_dat$SCAT5_GSC_TSS_Pre,main="GSC TSS",plotit=TRUE)
+Desc(normative_dat$SCAT5_GSC_SSS_Pre,main="GSC SSS",plotit=TRUE)
+Desc(normative_dat$SCAT5_SAC_Orient_Pre,main="SAC Orientation",plotit=TRUE)
+Desc(normative_dat$SCAT5_SAC_Mem_Pre,main="SAC Immediate Memory",plotit=TRUE)
+Desc(normative_dat$SCAT5_SAC_Dig_Pre,main="SAC Digits Backwards",plotit=TRUE)
+Desc(normative_dat$SCAT5_SAC_Months_Pre,main="SAC Months Backwards",plotit=TRUE)
+Desc(normative_dat$SCAT5_SAC_Con_Pre,main="SAC Concentration",plotit=TRUE)
+Desc(normative_dat$SCAT5_SAC_Mem_Delay_Pre,main="SAC Delayed Memory",plotit=TRUE)
+
+##VOMS
+Desc(normative_dat$VOMS_Pre_Test_Tot_Pre,main="Pre-Test Score",plotit=TRUE)
+Desc(normative_dat$VOMS_SP_Tot_Pre,plotit=TRUE)
+Desc(normative_dat$VOMS_Sacc_H_Tot_Pre,plotit=TRUE)
+Desc(normative_dat$VOMS_Sacc_V_Tot_Pre,plotit=TRUE)
+Desc(normative_dat$VOMS_Converg_Tot_Pre,plotit=TRUE)
+Desc(normative_dat$VOMS_VOR_H_Tot_Pre,plotit=TRUE)
+Desc(normative_dat$VOMS_VOR_V_Tot_Pre,plotit=TRUE)
+Desc(normative_dat$VOMS_VMS_Tot_Pre,plotit=TRUE)
+Desc(normative_dat$VOMS_NPC_Pre,plotit=TRUE)
+
+##VOMS scores should not be below 0 (scores below 0 indicate an improvement following tests)
+##Change all scores below 0 to 0
+normative_dat<-normative_dat %>%
+  mutate(across(VOMS_SP_Tot_Pre:VOMS_NPC_Pre,~if_else(.<0,0,.)))
+
+##Neck Dynamometry
+Desc(normative_dat$Neck_Flex_Avg_Pre,plotit=TRUE)
+Desc(normative_dat$Neck_Ext_Avg_Pre,plotit=TRUE)
+Desc(normative_dat$Neck_LatFlex_D_Avg_Pre,plotit=TRUE)
+Desc(normative_dat$Neck_LatFlex_Avg_ND_Pre,plotit=TRUE)
+Desc(normative_dat$Neck_SCM_D_Avg_Pre,plotit=TRUE)
+Desc(normative_dat$Neck_SCM_ND_Avg_Pre,plotit=TRUE)
+```
+
+### 4.2. Health-Related Questionnaires
+```{r Exploratory analysis of health questionnaire outcomes}
+
+1####Calculate clinical test cutoff scores####
+##PHQ-9##
+normative_dat<-normative_dat %>%
+  mutate(PHQ9_Scores=case_when(PHQ9_Tot_Pre<=4 ~ "None",
+                               PHQ9_Tot_Pre>=5 & PHQ9_Tot_Pre<=9 ~ "Mild",
+                               PHQ9_Tot_Pre>=10 & PHQ9_Tot_Pre<=14 ~ "Moderate",
+                               PHQ9_Tot_Pre>=15 & PHQ9_Tot_Pre<=19 ~ "Moderately severe",
+                               PHQ9_Tot_Pre>=20 ~ "Severe",
+                               TRUE ~ as.character(NA)))
+normative_dat$PHQ9_Scores<-factor(normative_dat$PHQ9_Scores, levels=c("None","Mild","Moderate","Moderately severe","Severe"))
+normative_dat<-normative_dat %>%
+  mutate(PHQ9_cutoff=if_else(PHQ9_Tot_Pre>=10,"Positive","Negative"))
+normative_dat$PHQ9_cutoff<-factor(normative_dat$PHQ9_cutoff)
+
+##GAD-7##
+normative_dat<-normative_dat %>%
+  mutate(GAD7_Scores=case_when(GAD7_Tot_Pre<=4 ~ "None",
+                               GAD7_Tot_Pre>=5 & GAD7_Tot_Pre<=9 ~ "Mild",
+                               GAD7_Tot_Pre>=10 & GAD7_Tot_Pre<=14 ~ "Moderate",
+                               GAD7_Tot_Pre>=15 ~ "Severe"))
+normative_dat$GAD7_Scores<-factor(normative_dat$GAD7_Scores, levels=c("None","Mild","Moderate","Severe"))
+normative_dat<-normative_dat %>%
+  mutate(GAD7_cutoff=if_else(GAD7_Tot_Pre>=10,"Positive","Negative"))
+normative_dat$GAD7_cutoff<-factor(normative_dat$GAD7_cutoff)
+
+##MIDAS##
+###Already calculated
+normative_dat$MIDAS_Grade_Pre<-factor(normative_dat$MIDAS_Grade_Pre)
+
+##NBQ##
+##No consensus on cutoff score
+
+##PSQI##
+normative_dat<-normative_dat %>% 
+  mutate(PSQI_Sleep_Quality=if_else(PSQI_Global_Pre<5,"Good sleep quality","Poor sleep quality"))
+normative_dat$PSQI_Sleep_Quality<-factor(normative_dat$PSQI_Sleep_Quality, levels=c("Good sleep quality","Poor sleep quality"))
+
+normative_dat<-normative_dat %>%
+  relocate(VOMS_SP:VOMS_NPC,.after=VOMS_NPC_Pre) %>%
+  relocate(VOMS_Cutoff,.after=VOMS_NPC) %>%
+  relocate(c(PHQ9_Scores,PHQ9_cutoff),.after=PHQ9_Tot_Pre) %>%
+  relocate(c(GAD7_Scores,GAD7_cutoff),.after=GAD7_Tot_Pre) %>%
+  relocate(PSQI_Sleep_Quality,.after=PSQI_Global_Pre)
+```
+### 4.2.1. Data Dictionary for Health Questionnaire Outcomes
+```{r Data dictionary for health questionnaires}
+
+healthQ_vars_df<-data.frame(Outcome=c("CP Total Score","CP Cognitive/Fatigue Score","CP Migraine Score","CP Vestibular Score","CP Ocular Score","CP Anxiety/Mood Score","CP Sleep Score","CP Neck Score","Patient Health Questionnaire-9 Score","PHQ-9 Grades","PHQ-9 Cutoff","Generalised Anxiety Disorder-7 Score","GAD-7 Grades","GAD-7 Cutoff","Neck Bournemouth Score","MIDAS Score","MIDAS Grade","PSQI Global Score","PSQI C1 Score","PSQI C2 Score","PSQI C3 Score","PSQI C4 Score","PSQI C5 Score","PSQI C6 Score","PSQI C7 Score","PSQI Cutoff"),
+                            Test=c("CP Screen","CP Screen","CP Screen","CP Screen","CP Screen","CP Screen","CP Screen","CP Screen","PHQ-9","PHQ-9","PHQ-9","GAD-7","GAD-7","GAD-7","NBQ","MIDAS","MIDAS","PSQI","PSQI","PSQI","PSQI","PSQI","PSQI","PSQI","PSQI","PSQI"),
+                            VarType=c("Numeric","Numeric","Numeric","Numeric","Numeric","Numeric","Numeric","Numeric","Numeric","Categorical","Categorical","Numeric","Categorical","Categorical","Numeric","Numeric","Categorical","Numeric","Categorical","Categorical","Categorical","Categorical","Categorical","Categorical","Categorical","Categorical"),
+                            Values=c("0-87","0,0.33,0.67,1,1.33,1.67,2","0,0.2,0.4,0.6,0.8,1","0,0.2,0.4,0.6,0.8,1,1.2","0,0.2,0.4,0.6,0.8,1,1.2,1.4,1.6,1.8","0,0.2,0.4,0.6,0.8,1,1.2,1.4,1.6,1.8","0,0.25,0.5,0.75,1,1.25,1.5,2.25","0,0.5,1,1.5,2,3","0,1,2...27","None, Mild, Moderate, Moderately Severe, Severe","Negative, positive","0,1,2...21","None, Mild, Moderate, Severe","Negative, positive","0,1,2...70","0,1,2...450","GI, GII, GIII, GIV","0,1,2...21","0,1,2,3","0,1,2,3","0,1,2,3","0,1,2,3","0,1,2,3","0,1,2,3","0,1,2,3","Poor quality, good quality"))
+kable(healthQ_vars_df)
+```
+### 4.2.2. Plot Health Questionnaire Outcomes
+```{r Plot health questionnaire outcomes, results='hide'}
+
+##CP Screen
+Desc(normative_dat$CP_Tot_Pre,main="Total CP Score",plotit=TRUE)
+Desc(normative_dat$CP_Cog_Pre,main="CP Cognitive Score",plotit=TRUE)
+Desc(normative_dat$CP_Ocu_Pre,main="CP Ocular Score",plotit=TRUE)
+Desc(normative_dat$CP_Anx_Pre,main="CP Mood/Anxiety Score",plotit=TRUE)
+Desc(normative_dat$CP_Mig_Pre,main="CP Migraine Score",plotit=TRUE)
+Desc(normative_dat$CP_Vest_Pre,main="CP Vestibular Score",plotit=TRUE)
+Desc(normative_dat$CP_Neck_Pre,main="CP Neck Score",plotit=TRUE)
+Desc(normative_dat$CP_Sleep_Pre,main="CP Sleep Score",plotit=TRUE)
+
+##PHQ-9
+Desc(normative_dat$PHQ9_Tot_Pre,main="PHQ-9 Score",plotit=TRUE)
+Desc(normative_dat$PHQ9_Scores,main="PHQ-9 Grade",plotit=TRUE)
+
+##GAD-7
+Desc(normative_dat$GAD7_Tot_Pre,main="GAD-7 Score",plotit=TRUE)
+Desc(normative_dat$GAD7_Scores,main="GAD-7 Grade",plotit=TRUE)
+
+##PSQI
+Desc(normative_dat$PSQI_C1_Pre,main="PSQI C1 Score",plotit=TRUE)
+Desc(normative_dat$PSQI_C2_Pre,main="PSQI C2 Score",plotit=TRUE)
+Desc(normative_dat$PSQI_C3_Pre,main="PSQI C3",plotit=TRUE)
+Desc(normative_dat$PSQI_C4_Pre,main="PSQI C4",plotit=TRUE)
+Desc(normative_dat$PSQI_C5_Pre,main="PSQI C5",plotit=TRUE)
+Desc(normative_dat$PSQI_C6_Pre,main="PSQI C6",plotit=TRUE)
+Desc(normative_dat$PSQI_C7_Pre,main="PSQI C7",plotit=TRUE)
+Desc(normative_dat$PSQI_Global_Pre,main="PSQI Global Score",plotit=TRUE)
+
+##NBQ
+Desc(normative_dat$NBQ_Tot_Pre,main="NBQ Score",plotit=TRUE)
+
+##MIDAS
+Desc(normative_dat$MIDAS_Tot_Pre,main="MIDAS Score",plotit=TRUE)
+Desc(normative_dat$MIDAS_Grade_Pre,main="MIDAS Grade",plotit=TRUE)
+```
+
+## 5. Descriptive Data
+
+Present means, SDs, medians, IQRs and ranges for clinical test and health questionnaire scores, for (i) all participants, and stratified by (ii) age, (iii) level of play and (iii) concussion history.
+
+### 5.1. Descriptive data for clinical tests
+
+### Descriptive data by demographic characteristic
+```{r}
+
+
+
+```
+
+#### 5.1.1. Clinical Tests, All Participants
+```{r CTs descriptives (all participants), message=FALSE, warning=FALSE}
+
+#Replace 0 with NA (could not complete test)
+normative_dat$SCAT5_Neuro_Time_TG_Pre[138]<-NA
+normative_dat$SCAT5_Neuro_Time_TG_Pre[103]<-NA
+
+clinical_tests_df<-normative_dat %>%
+  select(Age_Group,County,ConHis_yes_no,ConHis_Diag,ImPACT_Verbal_Mem_Score_Pre:PCSS_TSS_Pre,SCAT5_GSC_TSS_Pre:SCAT5_Neuro_Time_TG_Pre,SCAT5_BESS_Tot_Pre,SCAT5_BESS_DL_Pre:SCAT5_BESS_Tandem_Stance_Pre,VOMS_SP_Tot_Pre:Neck_SCM_ND_Avg_Pre)
+labels(clinical_tests_df)<-c("Age","Level of play","History of suspected or diagnosed concussion","History of diagnosed concussion",
+                             "Verbal Memory","Visual Memory","Visual Motor Speed","Reaction Time","Impulse Control","ImPACT valid","Post Concussion Symptom Score",
+                             "Total Symptom Score","Symptom Severity Score","Orientation","Immediate Memory","Digits Backwards","Months Backwards","Concentration","Delayed Recall","Finger-to-Nose Test, time","Tandem Gait, time","Modified Balance Error Scoring System Total","Double-Leg Stance","Single-Leg Stance","Tandem Gait Stance",
+                             "Smooth Pursuits","Horizontal Saccades","Vertical Saccades","Convergence","Horizontal Vestibulo-Ocular Reflex","Vertical Vestibulo-Ocular Reflex","Visual Motion Sensitivity","Near Point of Convergence (cm)","SP +/-","H Saccades +/-","V Saccades +/-","Convergence +/-","Horizontal VOR +/-","Vertical VOR +/-","VMS +/-","NPC +/-","Positive Score (%)",
+                             "Neck Flexion","Neck Extension","Lateral Flexion, dominant side","Lateral Flexion, non-dominant side","Rotation, dominant side","Rotation, non-dominant side")
+
+clinical_tests_t1<-papeR::summarize(clinical_tests_df,type="numeric",variable.labels=TRUE)
+
+clinical_tests_t1$MeanSD<-sprintf("%2.1f (%2.1f)",clinical_tests_t1$Mean,clinical_tests_t1$SD)
+clinical_tests_t1$MedianIQR<-sprintf("%2.1f (%2.1f-%2.1f)",clinical_tests_t1$Median,clinical_tests_t1$Q1,clinical_tests_t1$Q3)
+clinical_tests_t1$Range<-sprintf("%2.1f-%2.1f",clinical_tests_t1$Min,clinical_tests_t1$Max)
+
+colnames(clinical_tests_t1)<-c("Outcome","N","Missing","Missing2","Mean","SD","","Min","Q1","Median","Q3","Max","Mean (SD)","Median (IQR)","Range")
+clinical_tests_t1<-clinical_tests_t1 %>%
+  select(c("Outcome","N","Missing","Mean (SD)","Median (IQR)","Range"))
+
+set_flextable_defaults(font.family="Times",font.size=8,text.align="center",border.color="black")
+clinical_tests_t1<-flextable(clinical_tests_t1,cwidth=1)
+clinical_tests_t1<-italic(clinical_tests_t1,j=1)
+clinical_tests_t1<-bold(clinical_tests_t1,i=c(7:8,17),j=1)
+clinical_tests_t1<-border_remove(clinical_tests_t1)
+clinical_tests_t1<-hline_top(clinical_tests_t1,border=fp_border(width=0.5))
+clinical_tests_t1
+```
+#### 5.1.2. Clinical Tests, Stratified by Level of Play
+```{r CTs descriptives by level, message=FALSE, warning=FALSE}
+clinical_tests_t2<-papeR::summarize(clinical_tests_df,type="numeric",group="County",variable.labels=TRUE)
+
+clinical_tests_t2$MeanSD<-sprintf("%2.1f (%2.1f)",clinical_tests_t2$Mean,clinical_tests_t2$SD)
+clinical_tests_t2$MedianIQR<-sprintf("%2.1f (%2.1f-%2.1f)",clinical_tests_t2$Median,clinical_tests_t2$Q1,clinical_tests_t2$Q3)
+clinical_tests_t2$Range<-sprintf("%2.1f-%2.1f",clinical_tests_t2$Min,clinical_tests_t2$Max)
+
+colnames(clinical_tests_t2)<-c("Outcome","Level of play","Level2","N","Missing","Missing2","Mean","SD","SD2","Min","Q1","Median","Q3","Max","Max2","p.value","Mean (SD)","Median (IQR)","Range")
+clinical_tests_t2<-clinical_tests_t2 %>%
+  select(-c("Level2","Missing2","Mean","SD","SD2","Min","Q1","Median","Q3","Max","Max2"))
+clinical_tests_t2<-clinical_tests_t2 %>%
+  select("Outcome","Level of play","N","Missing","Mean (SD)","Median (IQR)","Range","p.value")
+
+clinical_tests_t2<-flextable(clinical_tests_t2,cwidth=1)
+clinical_tests_t2<-flextable::align(clinical_tests_t2,part="header",align="center")
+clinical_tests_t2<-align_nottext_col(clinical_tests_t2,align="center")
+clinical_tests_t2<-italic(clinical_tests_t2,j=1)
+clinical_tests_t2<-border_remove(clinical_tests_t2)
+clinical_tests_t2<-hline_top(clinical_tests_t2,border=fp_border(width=0.5))
+clinical_tests_t2
+```
+
+#### 5.1.3. Clinical Tests, Stratified by Age
+```{r CTs descriptives by age, message=FALSE, warning=FALSE}
+clinical_tests_t3<-papeR::summarize(clinical_tests_df,type="numeric",group="Age_Group",variable.labels=TRUE)
+
+clinical_tests_t3$MeanSD<-sprintf("%2.1f (%2.1f)",clinical_tests_t3$Mean,clinical_tests_t3$SD)
+clinical_tests_t3$MedianIQR<-sprintf("%2.1f (%2.1f-%2.1f)",clinical_tests_t3$Median,clinical_tests_t3$Q1,clinical_tests_t3$Q3)
+clinical_tests_t3$Range<-sprintf("%2.1f-%2.1f",clinical_tests_t3$Min,clinical_tests_t3$Max)
+
+colnames(clinical_tests_t3)<-c("Outcome","Age","Age2","N","Missing","Missing2","Mean","SD","SD2","Min","Q1","Median","Q3","Max","Max2",     "p.value","Mean (SD)","Median (IQR)","Range")
+clinical_tests_t3<-clinical_tests_t3 %>%
+  select(-c("Age2","Missing2","Mean","SD","SD2","Min","Q1","Median","Q3","Max","Max2"))
+clinical_tests_t3<-clinical_tests_t3 %>%
+  select("Outcome","Age","N","Missing","Mean (SD)","Median (IQR)","Range","p.value")
+
+clinical_tests_t3<-flextable(clinical_tests_t3,cwidth=1)
+clinical_tests_t3<-italic(clinical_tests_t3,j=1)
+clinical_tests_t3<-flextable::align(clinical_tests_t3,part="header",align="center")
+clinical_tests_t3<-align_nottext_col(clinical_tests_t3,align="center")
+clinical_tests_t3<-border_remove(clinical_tests_t3)
+clinical_tests_t3<-hline_top(clinical_tests_t3,border=fp_border(width=0.5))
+clinical_tests_t3
+```
+#### 5.1.4. Clinical Tests, Stratified by Concussion History
+```{r CTs descriptives by concussion history, message=FALSE, warning=FALSE}
+
+clinical_tests_t4<-papeR::summarize(clinical_tests_df,type="numeric",group="ConHis_Diag",variable.labels=TRUE)
+
+clinical_tests_t4$MeanSD<-sprintf("%2.1f (%2.1f)",clinical_tests_t4$Mean,clinical_tests_t4$SD)
+clinical_tests_t4$MedianIQR<-sprintf("%2.1f (%2.1f-%2.1f)",clinical_tests_t4$Median,clinical_tests_t4$Q1,clinical_tests_t4$Q3)
+clinical_tests_t4$Range<-sprintf("%2.1f-%2.1f",clinical_tests_t4$Min,clinical_tests_t4$Max)
+
+colnames(clinical_tests_t4)<-c("Outcome","History of diagnosed concussion","Con2","N","Missing","Missing2","Mean","SD","SD2","Min","Q1","Median","Q3","Max","Max2","p.value","Mean (SD)","Median (IQR)","Range")
+clinical_tests_t4<-clinical_tests_t4 %>%
+  select(-c("Con2","Missing2","Mean","SD","SD2","Min","Q1","Median","Q3","Max","Max2"))
+clinical_tests_t4<-clinical_tests_t4 %>%
+  select("Outcome","History of diagnosed concussion","N","Missing","Mean (SD)","Median (IQR)","Range","p.value")
+
+clinical_tests_t4<-flextable(clinical_tests_t4,cwidth=1)
+clinical_tests_t4<-italic(clinical_tests_t4,j=1)
+clinical_tests_t4<-flextable::align(clinical_tests_t4,part="header",align="center")
+clinical_tests_t4<-align_nottext_col(clinical_tests_t4,align="center")
+clinical_tests_t4<-border_remove(clinical_tests_t4)
+clinical_tests_t4<-hline_top(clinical_tests_t4,border=fp_border(width=0.5))
+clinical_tests_t4
+```
+### 5.2. Descriptive data for health questionnaires
+
+#### 5.2.1. Health Questionnaires, All Participants
+```{r HQs descriptive (all participants), message=FALSE, warning=FALSE}
+
+questionnaires_df<-normative_dat %>%
+  select(Age_Group,County,ConHis_yes_no,ConHis_Diag,CP_Tot_Pre,CP_Cog_Avg_Pre:CP_Neck_Avg_Pre,PHQ9_Tot_Pre:MIDAS_Grade_Pre,PSQI_Global_Pre,PSQI_C1_Pre:PSQI_C7_Pre,PSQI_Sleep_Quality)
+labels(questionnaires_df,which=c("Age_Group","County","ConHis_yes_no","ConHis_Diag"))<-c("Age","Level of Play","History of Suspected or Diagnosed Concussion","History of Diagnosed Concussion")
+labels(questionnaires_df,which=c("CP_Tot_Pre","CP_Cog_Avg_Pre","CP_Ocu_Avg_Pre","CP_Anx_Avg_Pre","CP_Mig_Avg_Pre","CP_Vest_Avg_Pre","CP_Sleep_Avg_Pre","CP_Neck_Avg_Pre","PHQ9_Tot_Pre","PHQ9_Scores","GAD7_Tot_Pre","GAD7_Scores","NBQ_Tot_Pre","MIDAS_Tot_Pre","MIDAS_Grade_Pre","PSQI_Global_Pre","PSQI_C1_Pre","PSQI_C2_Pre","PSQI_C3_Pre","PSQI_C4_Pre","PSQI_C5_Pre","PSQI_C6_Pre","PSQI_C7_Pre","PSQI_Sleep_Quality"))<-c("Clinical Profiles Screen Total","Cognitive/Fatigue","Ocular","Anxiety/Mood","Migraine","Vestibular","Sleep","Neck","Patient Health Questionnaire-9","PHQ-9 Score","Generalised Anxiety Disorder-7","GAD-7 Score","Neck Bournemouth Questionnaire","Migraine Disability Assessment","MIDAS Grade","Pittsburgh Sleep Quality Index","Component 1: Subjective Sleep Quality","Component 2: Sleep Latency","Component 3: Sleep Duration","Component 4: Sleep Efficiency","Component 5: Sleep Disturbance","Component 6:Use of Sleep Medication","Component 7: Daytime Dysfunction","PSQI Sleep Quality")
+
+questionnaires_t1<-papeR::summarize(questionnaires_df,type="numeric",variable.labels=TRUE)
+
+questionnaires_t1$MeanSD<-sprintf("%2.1f (%2.1f)",questionnaires_t1$Mean,questionnaires_t1$SD)
+questionnaires_t1$MedianIQR<-sprintf("%2.1f (%2.1f-%2.1f)",questionnaires_t1$Median,questionnaires_t1$Q1,questionnaires_t1$Q3)
+questionnaires_t1$Range<-sprintf("%2.1f-%2.1f",questionnaires_t1$Min,questionnaires_t1$Max)
+
+colnames(questionnaires_t1)<-c("Outcome","N","Missing","Missing2","Mean","SD","","Min","Q1","Median","Q3","Max","Mean (SD)","Median (IQR)","Range")
+questionnaires_t1<-questionnaires_t1 %>%
+  select(c("Outcome","N","Missing","Mean (SD)","Median (IQR)","Range"))
+
+set_flextable_defaults(font.family="Times",font.size=8,text.align="center",border.color="black")
+questionnaires_t1<-flextable(questionnaires_t1,cwidth=1)
+questionnaires_t1<-italic(questionnaires_t1,j=1)
+questionnaires_t1<-bold(questionnaires_t1,i=c(1,9:13),j=1)
+questionnaires_t1<-border_remove(questionnaires_t1)
+questionnaires_t1<-hline_top(questionnaires_t1,border=fp_border(width=0.5))
+questionnaires_t1
+```
+#### 5.2.2. Health Questionnaires, Stratified by Level of Play
+```{r HQs descriptives by level, message=FALSE, warning=FALSE}
+
+questionnaires_t2<-papeR::summarize(questionnaires_df,type="numeric",group="County",variable.labels=TRUE)
+
+questionnaires_t2$MeanSD<-sprintf("%2.1f (%2.1f)",questionnaires_t2$Mean,questionnaires_t2$SD)
+questionnaires_t2$MedianIQR<-sprintf("%2.1f (%2.1f-%2.1f)",questionnaires_t2$Median,questionnaires_t2$Q1,questionnaires_t2$Q3)
+questionnaires_t2$Range<-sprintf("%2.1f-%2.1f",questionnaires_t2$Min,questionnaires_t2$Max)
+
+colnames(questionnaires_t2)<-c("Outcome","Level of play","Level2","N","Missing","Missing2","Mean","SD","SD2","Min","Q1","Median","Q3","Max","Max2","p.value","Mean (SD)","Median (IQR)","Range")
+questionnaires_t2<-questionnaires_t2 %>%
+  select(-c("Level2","Missing2","Mean","SD","SD2","Min","Q1","Median","Q3","Max","Max2"))
+questionnaires_t2<-questionnaires_t2 %>%
+  select("Outcome","Level of play","N","Missing","Mean (SD)","Median (IQR)","Range","p.value")
+
+questionnaires_t2<-flextable(questionnaires_t2,cwidth=1)
+questionnaires_t2<-italic(questionnaires_t2,j=1)
+questionnaires_t2<-bold(questionnaires_t2,i=c(1,17,19,21,23,25),j=1)
+questionnaires_t2<-flextable::align(questionnaires_t2,part="header",align="center")
+questionnaires_t2<-align_nottext_col(questionnaires_t2,align="center")
+questionnaires_t2<-border_remove(questionnaires_t2)
+questionnaires_t2<-hline_top(questionnaires_t2,border=fp_border(width=0.5))
+questionnaires_t2
+```
+#### 5.2.3. Health Questionnaires, Stratified by Age
+```{r HQs descriptives by age, message=FALSE, warning=FALSE}
+
+questionnaires_t3<-papeR::summarize(questionnaires_df,type="numeric",group="Age_Group",variable.labels=TRUE)
+
+questionnaires_t3$MeanSD<-sprintf("%2.1f (%2.1f)",questionnaires_t3$Mean,questionnaires_t3$SD)
+questionnaires_t3$MedianIQR<-sprintf("%2.1f (%2.1f-%2.1f)",questionnaires_t3$Median,questionnaires_t3$Q1,questionnaires_t3$Q3)
+questionnaires_t3$Range<-sprintf("%2.1f-%2.1f",questionnaires_t3$Min,questionnaires_t3$Max)
+
+colnames(questionnaires_t3)<-c("Outcome","Level of play","Level2","N","Missing","Missing2","Mean","SD","SD2","Min","Q1","Median","Q3","Max","Max2","p.value","Mean (SD)","Median (IQR)","Range")
+questionnaires_t3<-questionnaires_t3 %>%
+  select(-c("Level2","Missing2","Mean","SD","SD2","Min","Q1","Median","Q3","Max","Max2"))
+questionnaires_t3<-questionnaires_t3 %>%
+  select("Outcome","Level of play","N","Missing","Mean (SD)","Median (IQR)","Range","p.value")
+
+questionnaires_t3<-flextable(questionnaires_t3,cwidth=1)
+questionnaires_t3<-italic(questionnaires_t3,j=1)
+questionnaires_t3<-bold(questionnaires_t3,i=c(1,17,19,21,23,25),j=1)
+questionnaires_t3<-flextable::align(questionnaires_t3,part="header",align="center")
+questionnaires_t3<-align_nottext_col(questionnaires_t3,align="center")
+questionnaires_t3<-border_remove(questionnaires_t3)
+questionnaires_t3<-hline_top(questionnaires_t3,border=fp_border(width=0.5))
+questionnaires_t3
+```
+#### 5.2.4. Health Questionnaires, Stratified by Concussion History
+```{r HQs descriptives by concussion history, message=FALSE, warning=FALSE}
+
+questionnaires_t4<-papeR::summarize(questionnaires_df,type="numeric",group="ConHis_Diag",variable.labels=TRUE)
+
+questionnaires_t4$MeanSD<-sprintf("%2.1f (%2.1f)",questionnaires_t4$Mean,questionnaires_t4$SD)
+questionnaires_t4$MedianIQR<-sprintf("%2.1f (%2.1f-%2.1f)",questionnaires_t4$Median,questionnaires_t4$Q1,questionnaires_t4$Q3)
+questionnaires_t4$Range<-sprintf("%2.1f-%2.1f",questionnaires_t4$Min,questionnaires_t4$Max)
+
+colnames(questionnaires_t4)<-c("Outcome","History of Diagnosed Concussion","Level2","N","Missing","Missing2","Mean","SD","SD2","Min","Q1","Median","Q3","Max","Max2","p.value","Mean (SD)","Median (IQR)","Range")
+questionnaires_t4<-questionnaires_t4 %>%
+  select(-c("Level2","Missing2","Mean","SD","SD2","Min","Q1","Median","Q3","Max","Max2"))
+questionnaires_t4<-questionnaires_t4 %>%
+  select("Outcome","History of Diagnosed Concussion","N","Missing","Mean (SD)","Median (IQR)","Range","p.value")
+
+questionnaires_t4<-flextable(questionnaires_t4,cwidth=1)
+questionnaires_t4<-italic(questionnaires_t4,j=1)
+questionnaires_t4<-bold(questionnaires_t4,i=c(1,17,19,21,23,25),j=1)
+questionnaires_t4<-flextable::align(questionnaires_t4,part="header",align="center")
+questionnaires_t4<-align_nottext_col(questionnaires_t4,align="center")
+questionnaires_t4<-border_remove(questionnaires_t4)
+questionnaires_t4<-hline_top(questionnaires_t4,border=fp_border(width=0.5))
+questionnaires_t4
+```
+## 6. Percentiles
+```{r Percentile Classifications}
+
+perc_class_df<-data.frame(Classification=c("Impaired","Borderline","Low Average","Average","High Average","Superior","Very Superior"),
+                          Percentile=c("<1.9%","2-9%","10-24%","25-75%","76-90%","91-97%",">=98%"))
+kable(perc_class_df)
+
+perc_fun<-function(x){quantile(x, probs=c(0.019,0.09,0.24,0.75,0.9,0.97,0.98), na.rm=TRUE)}
+
+perc_fun2<-function(x){quantile(-x, probs=c(0.019,0.09,0.24,0.75,0.9,0.97,0.98), na.rm=TRUE)}
+```
+### Percentiles by Demographic Characteristic
+
+#### ImPACT
+```{r Percentiles for ImPACT}
+
+ImPACT_pct_df<-normative_dat %>%
+  select(Age_Group,County,ConHis_Diag,ImPACT_Verbal_Mem_Score_Pre:ImPACT_Impulse_Control_Score_Pre,PCSS_TSS_Pre)
+
+ImPACT_pct_t1<-rbind(
+  perc_fun(ImPACT_pct_df$ImPACT_Verbal_Mem_Score_Pre),
+  perc_fun(ImPACT_pct_df$ImPACT_Visual_Mem_Score_Pre),
+  perc_fun(ImPACT_pct_df$ImPACT_Visual_Motor_Score_Pre),
+  perc_fun2(ImPACT_pct_df$ImPACT_Reaction_Time_Score_Pre),
+  perc_fun2(ImPACT_pct_df$PCSS_TSS_Pre),
+  perc_fun(ImPACT_pct_df$ImPACT_Verbal_Mem_Score_Pre[ImPACT_pct_df$Age_Group=="Adolescent"]),
+  perc_fun(ImPACT_pct_df$ImPACT_Visual_Mem_Score_Pre[ImPACT_pct_df$Age_Group=="Adolescent"]),
+  perc_fun(ImPACT_pct_df$ImPACT_Visual_Motor_Score_Pre[ImPACT_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(ImPACT_pct_df$ImPACT_Reaction_Time_Score_Pre[ImPACT_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(ImPACT_pct_df$PCSS_TSS_Pre[ImPACT_pct_df$Age_Group=="Adolescent"]),
+  perc_fun(ImPACT_pct_df$ImPACT_Verbal_Mem_Score_Pre[ImPACT_pct_df$Age_Group=="Adult"]),
+  perc_fun(ImPACT_pct_df$ImPACT_Visual_Mem_Score_Pre[ImPACT_pct_df$Age_Group=="Adult"]),
+  perc_fun(ImPACT_pct_df$ImPACT_Visual_Motor_Score_Pre[ImPACT_pct_df$Age_Group=="Adult"]),
+  perc_fun2(ImPACT_pct_df$ImPACT_Reaction_Time_Score_Pre[ImPACT_pct_df$Age_Group=="Adult"]),
+  perc_fun2(ImPACT_pct_df$PCSS_TSS_Pre[ImPACT_pct_df$Age_Group=="Adult"]),
+  perc_fun(ImPACT_pct_df$ImPACT_Verbal_Mem_Score_Pre[ImPACT_pct_df$County=="Elite"]),
+  perc_fun(ImPACT_pct_df$ImPACT_Visual_Mem_Score_Pre[ImPACT_pct_df$County=="Elite"]),
+  perc_fun(ImPACT_pct_df$ImPACT_Visual_Motor_Score_Pre[ImPACT_pct_df$County=="Elite"]),
+  perc_fun2(ImPACT_pct_df$ImPACT_Reaction_Time_Score_Pre[ImPACT_pct_df$County=="Elite"]),
+  perc_fun2(ImPACT_pct_df$PCSS_TSS_Pre[ImPACT_pct_df$County=="Elite"]),
+  perc_fun(ImPACT_pct_df$ImPACT_Verbal_Mem_Score_Pre[ImPACT_pct_df$County=="Non-Elite"]),
+  perc_fun(ImPACT_pct_df$ImPACT_Visual_Mem_Score_Pre[ImPACT_pct_df$County=="Non-Elite"]),
+  perc_fun(ImPACT_pct_df$ImPACT_Visual_Motor_Score_Pre[ImPACT_pct_df$County=="Non-Elite"]),
+  perc_fun2(ImPACT_pct_df$ImPACT_Reaction_Time_Score_Pre[ImPACT_pct_df$County=="Non-Elite"]),
+  perc_fun2(ImPACT_pct_df$PCSS_TSS_Pre[ImPACT_pct_df$County=="Non-Elite"]),
+  perc_fun(ImPACT_pct_df$ImPACT_Verbal_Mem_Score_Pre[ImPACT_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun(ImPACT_pct_df$ImPACT_Visual_Mem_Score_Pre[ImPACT_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun(ImPACT_pct_df$ImPACT_Visual_Motor_Score_Pre[ImPACT_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(ImPACT_pct_df$ImPACT_Reaction_Time_Score_Pre[ImPACT_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(ImPACT_pct_df$PCSS_TSS_Pre[ImPACT_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun(ImPACT_pct_df$ImPACT_Verbal_Mem_Score_Pre[ImPACT_pct_df$ConHis_Diag=="No"]),
+  perc_fun(ImPACT_pct_df$ImPACT_Visual_Mem_Score_Pre[ImPACT_pct_df$ConHis_Diag=="No"]),
+  perc_fun(ImPACT_pct_df$ImPACT_Visual_Motor_Score_Pre[ImPACT_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(ImPACT_pct_df$ImPACT_Reaction_Time_Score_Pre[ImPACT_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(ImPACT_pct_df$PCSS_TSS_Pre[ImPACT_pct_df$ConHis_Diag=="No"]))
+ImPACT_pct_t1
+
+names_perc<-c("Impaired (<1.9th %ile)","Borderline (9th %ile)","Low Average (24th %ile)","Average (75th %ile)","High Average (90th %ile)","Superior (97th %ile)","Very Superior (>98th %ile)")
+colnames(ImPACT_pct_t1)<-names_perc
+ImPACT_pct_t1<-as_tibble(ImPACT_pct_t1)
+
+ImPACT_Outcomes<-rep(c("Verbal Memory","Visual Memory","Visual Motor Speed","Reaction Time","Post-Concussion Symptom Score"),7)
+ImPACT_pct_t1<-ImPACT_pct_t1 %>% 
+  mutate(Outcome=ImPACT_Outcomes) %>%
+  select(Outcome, everything())
+
+Participants<-c("All","","","","",
+                       "Adolescent","","","","",
+                       "Adult","","","","",
+                       "Elite","","","","",
+                       "Non-Elite","","","","",
+                       "Concussion History","","","","",
+                       "No Concussion History","","","","")
+ImPACT_pct_t1<-ImPACT_pct_t1 %>%
+  mutate(Participants=Participants) %>%
+  select(Participants, everything())
+
+ImPACT_pct_ft1<-flextable(ImPACT_pct_t1)
+ImPACT_pct_ft1<-colformat_double(ImPACT_pct_ft1,digits=1)
+ImPACT_pct_ft1<-border_remove(ImPACT_pct_ft1)
+ImPACT_pct_ft1<-hline_top(ImPACT_pct_ft1,border=fp_border(width=0.5))
+ImPACT_pct_ft1<-italic(ImPACT_pct_ft1,part="header")
+ImPACT_pct_ft1<-bold(ImPACT_pct_ft1,part="header")
+ImPACT_pct_ft1<-italic(ImPACT_pct_ft1,j=1:2)
+ImPACT_pct_ft1<-flextable::align(ImPACT_pct_ft1,align="center",part="header")
+ImPACT_pct_ft1
+```
+
+#### SCAT5
+```{r Percentiles for SCAT5}
+
+SCAT5_pct_df<-normative_dat %>%
+  select(Age_Group,County,ConHis_Diag,SCAT5_GSC_TSS_Pre:SCAT5_BESS_Tandem_Stance_Pre,SCAT5_BESS_Tot_Pre)
+
+SCAT5_pct_t1<-rbind(
+##GSC  
+  perc_fun2(SCAT5_pct_df$SCAT5_GSC_TSS_Pre),
+  perc_fun2(SCAT5_pct_df$SCAT5_GSC_SSS_Pre),
+  perc_fun2(SCAT5_pct_df$SCAT5_GSC_TSS_Pre[SCAT5_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_GSC_SSS_Pre[SCAT5_pct_df$Age_Group=="Adolescent"]),
+    perc_fun2(SCAT5_pct_df$SCAT5_GSC_TSS_Pre[SCAT5_pct_df$Age_Group=="Adult"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_GSC_SSS_Pre[SCAT5_pct_df$Age_Group=="Adult"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_GSC_TSS_Pre[SCAT5_pct_df$County=="Elite"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_GSC_SSS_Pre[SCAT5_pct_df$County=="Elite"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_GSC_TSS_Pre[SCAT5_pct_df$County=="Non-Elite"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_GSC_SSS_Pre[SCAT5_pct_df$County=="Non-Elite"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_GSC_TSS_Pre[SCAT5_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_GSC_SSS_Pre[SCAT5_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_GSC_TSS_Pre[SCAT5_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_GSC_SSS_Pre[SCAT5_pct_df$ConHis_Diag=="No"]),
+##SAC  
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Orient_Pre),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Mem_Pre),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Dig_Pre),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Months_Pre),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Con_Pre),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Mem_Delay_Pre),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Orient_Pre[SCAT5_pct_df$Age_Group=="Adolescent"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Mem_Pre[SCAT5_pct_df$Age_Group=="Adolescent"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Dig_Pre[SCAT5_pct_df$Age_Group=="Adolescent"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Months_Pre[SCAT5_pct_df$Age_Group=="Adolescent"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Con_Pre[SCAT5_pct_df$Age_Group=="Adolescent"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Mem_Delay_Pre[SCAT5_pct_df$Age_Group=="Adolescent"]),
+perc_fun(SCAT5_pct_df$SCAT5_SAC_Orient_Pre[SCAT5_pct_df$Age_Group=="Adult"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Mem_Pre[SCAT5_pct_df$Age_Group=="Adult"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Dig_Pre[SCAT5_pct_df$Age_Group=="Adult"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Months_Pre[SCAT5_pct_df$Age_Group=="Adult"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Con_Pre[SCAT5_pct_df$Age_Group=="Adult"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Mem_Delay_Pre[SCAT5_pct_df$Age_Group=="Adult"]),
+perc_fun(SCAT5_pct_df$SCAT5_SAC_Orient_Pre[SCAT5_pct_df$County=="Elite"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Mem_Pre[SCAT5_pct_df$County=="Elite"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Dig_Pre[SCAT5_pct_df$County=="Elite"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Months_Pre[SCAT5_pct_df$County=="Elite"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Con_Pre[SCAT5_pct_df$County=="Elite"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Mem_Delay_Pre[SCAT5_pct_df$County=="Elite"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Orient_Pre[SCAT5_pct_df$County=="Non-Elite"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Mem_Pre[SCAT5_pct_df$County=="Non-Elite"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Dig_Pre[SCAT5_pct_df$County=="Non-Elite"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Months_Pre[SCAT5_pct_df$County=="Non-Elite"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Con_Pre[SCAT5_pct_df$County=="Non-Elite"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Mem_Delay_Pre[SCAT5_pct_df$County=="Non-Elite"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Orient_Pre[SCAT5_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Mem_Pre[SCAT5_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Dig_Pre[SCAT5_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Months_Pre[SCAT5_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Con_Pre[SCAT5_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Mem_Delay_Pre[SCAT5_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Orient_Pre[SCAT5_pct_df$ConHis_Diag=="No"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Mem_Pre[SCAT5_pct_df$ConHis_Diag=="No"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Dig_Pre[SCAT5_pct_df$ConHis_Diag=="No"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Months_Pre[SCAT5_pct_df$ConHis_Diag=="No"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Con_Pre[SCAT5_pct_df$ConHis_Diag=="No"]),
+  perc_fun(SCAT5_pct_df$SCAT5_SAC_Mem_Delay_Pre[SCAT5_pct_df$ConHis_Diag=="No"]),
+##Neuro  
+  perc_fun2(SCAT5_pct_df$SCAT5_Neuro_FTN_Time_Pre),
+  perc_fun2(SCAT5_pct_df$SCAT5_Neuro_Time_TG_Pre),
+  perc_fun2(SCAT5_pct_df$SCAT5_Neuro_FTN_Time_Pre[SCAT5_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_Neuro_Time_TG_Pre[SCAT5_pct_df$Age_Group=="Adolescent"]), 
+  perc_fun2(SCAT5_pct_df$SCAT5_Neuro_FTN_Time_Pre[SCAT5_pct_df$Age_Group=="Adult"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_Neuro_Time_TG_Pre[SCAT5_pct_df$Age_Group=="Adult"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_Neuro_FTN_Time_Pre[SCAT5_pct_df$County=="Elite"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_Neuro_Time_TG_Pre[SCAT5_pct_df$County=="Elite"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_Neuro_FTN_Time_Pre[SCAT5_pct_df$County=="Non-Elite"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_Neuro_Time_TG_Pre[SCAT5_pct_df$County=="Non-Elite"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_Neuro_FTN_Time_Pre[SCAT5_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_Neuro_Time_TG_Pre[SCAT5_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_Neuro_FTN_Time_Pre[SCAT5_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_Neuro_Time_TG_Pre[SCAT5_pct_df$ConHis_Diag=="No"]),
+##mBESS  
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_Tot_Pre),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_DL_Pre),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_SL_Pre),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_Tandem_Stance_Pre),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_Tot_Pre[SCAT5_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_DL_Pre[SCAT5_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_SL_Pre[SCAT5_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_Tandem_Stance_Pre[SCAT5_pct_df$Age_Group=="Adolescent"]),
+ perc_fun2(SCAT5_pct_df$SCAT5_BESS_Tot_Pre[SCAT5_pct_df$Age_Group=="Adult"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_DL_Pre[SCAT5_pct_df$Age_Group=="Adult"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_SL_Pre[SCAT5_pct_df$Age_Group=="Adult"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_Tandem_Stance_Pre[SCAT5_pct_df$Age_Group=="Adult"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_Tot_Pre[SCAT5_pct_df$County=="Elite"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_DL_Pre[SCAT5_pct_df$County=="Elite"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_SL_Pre[SCAT5_pct_df$County=="Elite"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_Tandem_Stance_Pre[SCAT5_pct_df$County=="Elite"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_Tot_Pre[SCAT5_pct_df$County=="Non-Elite"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_DL_Pre[SCAT5_pct_df$County=="Non-Elite"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_SL_Pre[SCAT5_pct_df$County=="Non-Elite"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_Tandem_Stance_Pre[SCAT5_pct_df$County=="Non-Elite"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_Tot_Pre[SCAT5_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_DL_Pre[SCAT5_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_SL_Pre[SCAT5_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_Tandem_Stance_Pre[SCAT5_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_Tot_Pre[SCAT5_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_DL_Pre[SCAT5_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_SL_Pre[SCAT5_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(SCAT5_pct_df$SCAT5_BESS_Tandem_Stance_Pre[SCAT5_pct_df$ConHis_Diag=="No"]))
+SCAT5_pct_t1
+
+colnames(SCAT5_pct_t1)<-names_perc
+SCAT5_pct_t1<-as_tibble(SCAT5_pct_t1)
+
+SCAT5_Outcomes<-c(rep(c("Total Symptom Score", "Symptom Severity Score"),7),rep(c("Orientation","Immediate Memory","Digits Backwards","Months Backwards","Concentration","Delayed Memory"),7),rep(c("Finger-to-nose test","Tandem gait test"),7),rep(c("BESS Total Score","BESS Double-Leg Score","BESS Single-Leg Score","BESS Tandem Gait Score"),7))
+SCAT5_pct_t1<-SCAT5_pct_t1 %>% 
+  mutate(Outcome=SCAT5_Outcomes) %>%
+  select(Outcome, everything())
+
+Participants_SCAT5<-c("All","","Adolescent","","Adult","","Elite","","Non-Elite","","Concussion History","","No Concussion History","",
+                      "All","","","","","",
+                      "Adolescent","","","","","",
+                      "Adult","","","","","",
+                      "Elite","","","","","",
+                      "Non-Elite","","","","","",
+                      "Concussion History","","","","","",
+                      "No Concussion History","","","","","",
+                      "All","","Adolescent","","Adult","","Elite","","Non-Elite","","Concussion History","","No Concussion History","",
+                      "All","","","",
+                      "Adolescent","","","",
+                      "Adult","","","",
+                      "Elite","","","",
+                      "Non-Elite","","","",
+                      "Concussion History","","","",
+                      "No Concussion History","","","")
+SCAT5_pct_t1<-SCAT5_pct_t1 %>%
+  mutate(Participants=Participants_SCAT5) %>%
+  select(Participants, everything())
+
+SCAT5_pct_ft1<-flextable(SCAT5_pct_t1)
+SCAT5_pct_ft1<-colformat_double(SCAT5_pct_ft1,digits=1)
+SCAT5_pct_ft1<-border_remove(SCAT5_pct_ft1)
+SCAT5_pct_ft1<-hline_top(SCAT5_pct_ft1,border=fp_border(width=0.5))
+SCAT5_pct_ft1<-italic(SCAT5_pct_ft1,part="header")
+SCAT5_pct_ft1<-bold(SCAT5_pct_ft1,part="header")
+SCAT5_pct_ft1<-italic(SCAT5_pct_ft1,j=1:2)
+SCAT5_pct_ft1<-flextable::align(SCAT5_pct_ft1,align="center",part="header")
+SCAT5_pct_ft1
+```
+
+#### VOMS
+```{r Percentiles for VOMS}
+
+VOMS_pct_df<-normative_dat %>%
+  select(Age_Group,County,ConHis_Diag,VOMS_SP_Tot_Pre:VOMS_NPC_Pre)
+
+VOMS_pct_t1<-rbind(
+  perc_fun2(VOMS_pct_df$VOMS_SP_Tot_Pre),
+  perc_fun2(VOMS_pct_df$VOMS_Sacc_H_Tot_Pre),
+  perc_fun2(VOMS_pct_df$VOMS_Sacc_V_Tot_Pre),
+  perc_fun2(VOMS_pct_df$VOMS_Converg_Tot_Pre),
+  perc_fun2(VOMS_pct_df$VOMS_VOR_H_Tot_Pre),
+  perc_fun2(VOMS_pct_df$VOMS_VOR_V_Tot_Pre),
+  perc_fun2(VOMS_pct_df$VOMS_VMS_Tot_Pre),
+  perc_fun2(VOMS_pct_df$VOMS_NPC_Pre),
+  perc_fun2(VOMS_pct_df$VOMS_SP_Tot_Pre[VOMS_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(VOMS_pct_df$VOMS_Sacc_H_Tot_Pre[VOMS_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(VOMS_pct_df$VOMS_Sacc_V_Tot_Pre[VOMS_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(VOMS_pct_df$VOMS_Converg_Tot_Pre[VOMS_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(VOMS_pct_df$VOMS_VOR_H_Tot_Pre[VOMS_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(VOMS_pct_df$VOMS_VOR_V_Tot_Pre[VOMS_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(VOMS_pct_df$VOMS_VMS_Tot_Pre[VOMS_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(VOMS_pct_df$VOMS_NPC_Pre[VOMS_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(VOMS_pct_df$VOMS_SP_Tot_Pre[VOMS_pct_df$Age_Group=="Adult"]),
+  perc_fun2(VOMS_pct_df$VOMS_Sacc_H_Tot_Pre[VOMS_pct_df$Age_Group=="Adult"]),
+  perc_fun2(VOMS_pct_df$VOMS_Sacc_V_Tot_Pre[VOMS_pct_df$Age_Group=="Adult"]),
+  perc_fun2(VOMS_pct_df$VOMS_Converg_Tot_Pre[VOMS_pct_df$Age_Group=="Adult"]),
+  perc_fun2(VOMS_pct_df$VOMS_VOR_H_Tot_Pre[VOMS_pct_df$Age_Group=="Adult"]),
+  perc_fun2(VOMS_pct_df$VOMS_VOR_V_Tot_Pre[VOMS_pct_df$Age_Group=="Adult"]),
+  perc_fun2(VOMS_pct_df$VOMS_VMS_Tot_Pre[VOMS_pct_df$Age_Group=="Adult"]),
+  perc_fun2(VOMS_pct_df$VOMS_NPC_Pre[VOMS_pct_df$Age_Group=="Adult"]),
+  perc_fun2(VOMS_pct_df$VOMS_SP_Tot_Pre[VOMS_pct_df$County=="Elite"]),
+  perc_fun2(VOMS_pct_df$VOMS_Sacc_H_Tot_Pre[VOMS_pct_df$County=="Elite"]),
+  perc_fun2(VOMS_pct_df$VOMS_Sacc_V_Tot_Pre[VOMS_pct_df$County=="Elite"]),
+  perc_fun2(VOMS_pct_df$VOMS_Converg_Tot_Pre[VOMS_pct_df$County=="Elite"]),
+  perc_fun2(VOMS_pct_df$VOMS_VOR_H_Tot_Pre[VOMS_pct_df$County=="Elite"]),
+  perc_fun2(VOMS_pct_df$VOMS_VOR_V_Tot_Pre[VOMS_pct_df$County=="Elite"]),
+  perc_fun2(VOMS_pct_df$VOMS_VMS_Tot_Pre[VOMS_pct_df$County=="Elite"]),
+  perc_fun2(VOMS_pct_df$VOMS_NPC_Pre[VOMS_pct_df$County=="Elite"]),
+ perc_fun2(VOMS_pct_df$VOMS_SP_Tot_Pre[VOMS_pct_df$County=="Non-Elite"]),
+  perc_fun2(VOMS_pct_df$VOMS_Sacc_H_Tot_Pre[VOMS_pct_df$County=="Non-Elite"]),
+  perc_fun2(VOMS_pct_df$VOMS_Sacc_V_Tot_Pre[VOMS_pct_df$County=="Non-Elite"]),
+  perc_fun2(VOMS_pct_df$VOMS_Converg_Tot_Pre[VOMS_pct_df$County=="Non-Elite"]),
+  perc_fun2(VOMS_pct_df$VOMS_VOR_H_Tot_Pre[VOMS_pct_df$County=="Non-Elite"]),
+  perc_fun2(VOMS_pct_df$VOMS_VOR_V_Tot_Pre[VOMS_pct_df$County=="Non-Elite"]),
+  perc_fun2(VOMS_pct_df$VOMS_VMS_Tot_Pre[VOMS_pct_df$County=="Non-Elite"]),
+  perc_fun2(VOMS_pct_df$VOMS_NPC_Pre[VOMS_pct_df$County=="Non-Elite"]),
+ perc_fun2(VOMS_pct_df$VOMS_SP_Tot_Pre[VOMS_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(VOMS_pct_df$VOMS_Sacc_H_Tot_Pre[VOMS_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(VOMS_pct_df$VOMS_Sacc_V_Tot_Pre[VOMS_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(VOMS_pct_df$VOMS_Converg_Tot_Pre[VOMS_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(VOMS_pct_df$VOMS_VOR_H_Tot_Pre[VOMS_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(VOMS_pct_df$VOMS_VOR_V_Tot_Pre[VOMS_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(VOMS_pct_df$VOMS_VMS_Tot_Pre[VOMS_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(VOMS_pct_df$VOMS_NPC_Pre[VOMS_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(VOMS_pct_df$VOMS_SP_Tot_Pre[VOMS_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(VOMS_pct_df$VOMS_Sacc_H_Tot_Pre[VOMS_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(VOMS_pct_df$VOMS_Sacc_V_Tot_Pre[VOMS_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(VOMS_pct_df$VOMS_Converg_Tot_Pre[VOMS_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(VOMS_pct_df$VOMS_VOR_H_Tot_Pre[VOMS_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(VOMS_pct_df$VOMS_VOR_V_Tot_Pre[VOMS_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(VOMS_pct_df$VOMS_VMS_Tot_Pre[VOMS_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(VOMS_pct_df$VOMS_NPC_Pre[VOMS_pct_df$ConHis_Diag=="No"]))
+
+colnames(VOMS_pct_t1)<-names_perc
+VOMS_pct_t1<-as_tibble(VOMS_pct_t1)
+
+VOMS_Outcomes<-rep(c("Smooth Pursuits","Horizontal Saccades","Vertical Saccades","Convergence","Horizontal Vestibulo-Ocular Reflex","Vertical Vestibulo-Ocular Reflex","Visual Motion Sensitivity","Near Point of Convergence, cm"),7)
+VOMS_pct_t1<-VOMS_pct_t1 %>% 
+  mutate(Outcome=VOMS_Outcomes) %>%
+  select(Outcome, everything())
+
+Participants_VOMS<-c("All","","","","","","","",
+                       "Adolescent","","","","","","","",
+                       "Adult","","","","","","","",
+                       "Elite","","","","","","","",
+                       "Non-Elite","","","","","","","",
+                       "Concussion History","","","","","","","",
+                       "No Concussion History","","","","","","","")
+VOMS_pct_t1<-VOMS_pct_t1 %>%
+  mutate(Participants=Participants_VOMS) %>%
+  select(Participants, everything())
+
+VOMS_pct_ft1<-flextable(VOMS_pct_t1)
+VOMS_pct_ft1<-colformat_double(VOMS_pct_ft1,digits=1)
+VOMS_pct_ft1<-border_remove(VOMS_pct_ft1)
+VOMS_pct_ft1<-hline_top(VOMS_pct_ft1,border=fp_border(width=0.5))
+VOMS_pct_ft1<-italic(VOMS_pct_ft1,part="header")
+VOMS_pct_ft1<-bold(VOMS_pct_ft1,part="header")
+VOMS_pct_ft1<-italic(VOMS_pct_ft1,j=1:2)
+VOMS_pct_ft1<-flextable::align(VOMS_pct_ft1,align="center",part="header")
+VOMS_pct_ft1
+```
+
+#### Neck Dynamometry
+
+#### CP Screen
+```{r Percentiles for CP Screen}
+
+CP_Screen_pct_df<-normative_dat %>%
+  select(Age_Group,County,ConHis_Diag,CP_Tot_Pre:CP_Neck_Avg_Pre)
+
+CP_Screen_pct_t1<-rbind(
+  perc_fun2(CP_Screen_pct_df$CP_Tot_Pre),
+  perc_fun2(CP_Screen_pct_df$CP_Cog_Avg_Pre),
+  perc_fun2(CP_Screen_pct_df$CP_Ocu_Avg_Pre),
+  perc_fun2(CP_Screen_pct_df$CP_Anx_Avg_Pre),
+  perc_fun2(CP_Screen_pct_df$CP_Mig_Avg_Pre),
+  perc_fun2(CP_Screen_pct_df$CP_Vest_Avg_Pre),
+  perc_fun2(CP_Screen_pct_df$CP_Sleep_Avg_Pre),
+  perc_fun2(CP_Screen_pct_df$CP_Neck_Avg_Pre),
+  perc_fun2(CP_Screen_pct_df$CP_Tot_Pre[CP_Screen_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(CP_Screen_pct_df$CP_Cog_Avg_Pre[CP_Screen_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(CP_Screen_pct_df$CP_Ocu_Avg_Pre[CP_Screen_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(CP_Screen_pct_df$CP_Anx_Avg_Pre[CP_Screen_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(CP_Screen_pct_df$CP_Mig_Avg_Pre[CP_Screen_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(CP_Screen_pct_df$CP_Vest_Avg_Pre[CP_Screen_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(CP_Screen_pct_df$CP_Sleep_Avg_Pre[CP_Screen_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(CP_Screen_pct_df$CP_Neck_Avg_Pre[CP_Screen_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(CP_Screen_pct_df$CP_Tot_Pre[CP_Screen_pct_df$Age_Group=="Adult"]),
+  perc_fun2(CP_Screen_pct_df$CP_Cog_Avg_Pre[CP_Screen_pct_df$Age_Group=="Adult"]),
+  perc_fun2(CP_Screen_pct_df$CP_Ocu_Avg_Pre[CP_Screen_pct_df$Age_Group=="Adult"]),
+  perc_fun2(CP_Screen_pct_df$CP_Anx_Avg_Pre[CP_Screen_pct_df$Age_Group=="Adult"]),
+  perc_fun2(CP_Screen_pct_df$CP_Mig_Avg_Pre[CP_Screen_pct_df$Age_Group=="Adult"]),
+  perc_fun2(CP_Screen_pct_df$CP_Vest_Avg_Pre[CP_Screen_pct_df$Age_Group=="Adult"]),
+  perc_fun2(CP_Screen_pct_df$CP_Sleep_Avg_Pre[CP_Screen_pct_df$Age_Group=="Adult"]),
+  perc_fun2(CP_Screen_pct_df$CP_Neck_Avg_Pre[CP_Screen_pct_df$Age_Group=="Adult"]),
+  perc_fun2(CP_Screen_pct_df$CP_Tot_Pre[CP_Screen_pct_df$County=="Elite"]),
+  perc_fun2(CP_Screen_pct_df$CP_Cog_Avg_Pre[CP_Screen_pct_df$County=="Elite"]),
+  perc_fun2(CP_Screen_pct_df$CP_Ocu_Avg_Pre[CP_Screen_pct_df$County=="Elite"]),
+  perc_fun2(CP_Screen_pct_df$CP_Anx_Avg_Pre[CP_Screen_pct_df$County=="Elite"]),
+  perc_fun2(CP_Screen_pct_df$CP_Mig_Avg_Pre[CP_Screen_pct_df$County=="Elite"]),
+  perc_fun2(CP_Screen_pct_df$CP_Vest_Avg_Pre[CP_Screen_pct_df$County=="Elite"]),
+  perc_fun2(CP_Screen_pct_df$CP_Sleep_Avg_Pre[CP_Screen_pct_df$County=="Elite"]),
+  perc_fun2(CP_Screen_pct_df$CP_Neck_Avg_Pre[CP_Screen_pct_df$County=="Elite"]),
+  perc_fun2(CP_Screen_pct_df$CP_Tot_Pre[CP_Screen_pct_df$County=="Non-Elite"]),
+  perc_fun2(CP_Screen_pct_df$CP_Cog_Avg_Pre[CP_Screen_pct_df$County=="Non-Elite"]),
+  perc_fun2(CP_Screen_pct_df$CP_Ocu_Avg_Pre[CP_Screen_pct_df$County=="Non-Elite"]),
+  perc_fun2(CP_Screen_pct_df$CP_Anx_Avg_Pre[CP_Screen_pct_df$County=="Non-Elite"]),
+  perc_fun2(CP_Screen_pct_df$CP_Mig_Avg_Pre[CP_Screen_pct_df$County=="Non-Elite"]),
+  perc_fun2(CP_Screen_pct_df$CP_Vest_Avg_Pre[CP_Screen_pct_df$County=="Non-Elite"]),
+  perc_fun2(CP_Screen_pct_df$CP_Sleep_Avg_Pre[CP_Screen_pct_df$County=="Non-Elite"]),
+  perc_fun2(CP_Screen_pct_df$CP_Neck_Avg_Pre[CP_Screen_pct_df$County=="Non-Elite"]),
+  perc_fun2(CP_Screen_pct_df$CP_Tot_Pre[CP_Screen_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(CP_Screen_pct_df$CP_Cog_Avg_Pre[CP_Screen_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(CP_Screen_pct_df$CP_Ocu_Avg_Pre[CP_Screen_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(CP_Screen_pct_df$CP_Anx_Avg_Pre[CP_Screen_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(CP_Screen_pct_df$CP_Mig_Avg_Pre[CP_Screen_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(CP_Screen_pct_df$CP_Vest_Avg_Pre[CP_Screen_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(CP_Screen_pct_df$CP_Sleep_Avg_Pre[CP_Screen_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(CP_Screen_pct_df$CP_Neck_Avg_Pre[CP_Screen_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(CP_Screen_pct_df$CP_Tot_Pre[CP_Screen_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(CP_Screen_pct_df$CP_Cog_Avg_Pre[CP_Screen_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(CP_Screen_pct_df$CP_Ocu_Avg_Pre[CP_Screen_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(CP_Screen_pct_df$CP_Anx_Avg_Pre[CP_Screen_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(CP_Screen_pct_df$CP_Mig_Avg_Pre[CP_Screen_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(CP_Screen_pct_df$CP_Vest_Avg_Pre[CP_Screen_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(CP_Screen_pct_df$CP_Sleep_Avg_Pre[CP_Screen_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(CP_Screen_pct_df$CP_Neck_Avg_Pre[CP_Screen_pct_df$ConHis_Diag=="No"]))
+
+colnames(CP_Screen_pct_t1)<-names_perc
+CP_Screen_pct_t1<-as_tibble(CP_Screen_pct_t1)
+
+CP_Screen_Outcomes<-rep(c("Total Score","Cognitive/Fatigue","Ocular","Anxiety/Mood","Migraine","Vestibular","Sleep","Neck"),7)
+CP_Screen_pct_t1<-CP_Screen_pct_t1 %>% 
+  mutate(Outcome=CP_Screen_Outcomes) %>%
+  select(Outcome, everything())
+
+Participants_CP_Screen<-c("All","","","","","","","",
+                       "Adolescent","","","","","","","",
+                       "Adult","","","","","","","",
+                       "Elite","","","","","","","",
+                       "Non-Elite","","","","","","","",
+                       "Concussion History","","","","","","","",
+                       "No Concussion History","","","","","","","")
+CP_Screen_pct_t1<-CP_Screen_pct_t1 %>%
+  mutate(Participants=Participants_CP_Screen) %>%
+  select(Participants, everything())
+
+CP_Screen_pct_ft1<-flextable(CP_Screen_pct_t1)
+CP_Screen_pct_ft1<-colformat_double(CP_Screen_pct_ft1,digits=1)
+CP_Screen_pct_ft1<-border_remove(CP_Screen_pct_ft1)
+CP_Screen_pct_ft1<-hline_top(CP_Screen_pct_ft1,border=fp_border(width=0.5))
+CP_Screen_pct_ft1<-italic(CP_Screen_pct_ft1,part="header")
+CP_Screen_pct_ft1<-bold(CP_Screen_pct_ft1,part="header")
+CP_Screen_pct_ft1<-italic(CP_Screen_pct_ft1,j=1:2)
+CP_Screen_pct_ft1<-flextable::align(CP_Screen_pct_ft1,align="center",part="header")
+CP_Screen_pct_ft1
+```
+
+#### Health Questionnaires
+```{r Percentiles for health questionnaires}
+
+HealthQ_pct_df<-normative_dat %>%
+  select(Age_Group,County,ConHis_Diag,PHQ9_Tot_Pre,GAD7_Tot_Pre,NBQ_Tot_Pre,MIDAS_Tot_Pre,PSQI_C1_Pre:PSQI_Global_Pre)
+
+HealthQ_pct_t1<-rbind(
+  perc_fun2(HealthQ_pct_df$PHQ9_Tot_Pre),
+  perc_fun2(HealthQ_pct_df$GAD7_Tot_Pre),
+  perc_fun2(HealthQ_pct_df$NBQ_Tot_Pre),
+  perc_fun2(HealthQ_pct_df$MIDAS_Tot_Pre),
+  perc_fun2(HealthQ_pct_df$PSQI_Global_Pre),
+  perc_fun2(HealthQ_pct_df$PSQI_C1_Pre),
+  perc_fun2(HealthQ_pct_df$PSQI_C2_Pre),
+  perc_fun2(HealthQ_pct_df$PSQI_C3_Pre),
+  perc_fun2(HealthQ_pct_df$PSQI_C4_Pre),
+  perc_fun2(HealthQ_pct_df$PSQI_C5_Pre),
+  perc_fun2(HealthQ_pct_df$PSQI_C6_Pre),
+  perc_fun2(HealthQ_pct_df$PSQI_C7_Pre),
+  perc_fun2(HealthQ_pct_df$PHQ9_Tot_Pre[HealthQ_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(HealthQ_pct_df$GAD7_Tot_Pre[HealthQ_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(HealthQ_pct_df$NBQ_Tot_Pre[HealthQ_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(HealthQ_pct_df$MIDAS_Tot_Pre[HealthQ_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(HealthQ_pct_df$PSQI_Global_Pre[HealthQ_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C1_Pre[HealthQ_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C2_Pre[HealthQ_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C3_Pre[HealthQ_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C4_Pre[HealthQ_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C5_Pre[HealthQ_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C6_Pre[HealthQ_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C7_Pre[HealthQ_pct_df$Age_Group=="Adolescent"]),
+  perc_fun2(HealthQ_pct_df$PHQ9_Tot_Pre[HealthQ_pct_df$Age_Group=="Adult"]),
+  perc_fun2(HealthQ_pct_df$GAD7_Tot_Pre[HealthQ_pct_df$Age_Group=="Adult"]),
+  perc_fun2(HealthQ_pct_df$NBQ_Tot_Pre[HealthQ_pct_df$Age_Group=="Adult"]),
+  perc_fun2(HealthQ_pct_df$MIDAS_Tot_Pre[HealthQ_pct_df$Age_Group=="Adult"]),
+  perc_fun2(HealthQ_pct_df$PSQI_Global_Pre[HealthQ_pct_df$Age_Group=="Adult"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C1_Pre[HealthQ_pct_df$Age_Group=="Adult"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C2_Pre[HealthQ_pct_df$Age_Group=="Adult"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C3_Pre[HealthQ_pct_df$Age_Group=="Adult"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C4_Pre[HealthQ_pct_df$Age_Group=="Adult"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C5_Pre[HealthQ_pct_df$Age_Group=="Adult"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C6_Pre[HealthQ_pct_df$Age_Group=="Adult"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C7_Pre[HealthQ_pct_df$Age_Group=="Adult"]),
+  perc_fun2(HealthQ_pct_df$PHQ9_Tot_Pre[HealthQ_pct_df$County=="Elite"]),
+  perc_fun2(HealthQ_pct_df$GAD7_Tot_Pre[HealthQ_pct_df$County=="Elite"]),
+  perc_fun2(HealthQ_pct_df$NBQ_Tot_Pre[HealthQ_pct_df$County=="Elite"]),
+  perc_fun2(HealthQ_pct_df$MIDAS_Tot_Pre[HealthQ_pct_df$County=="Elite"]),
+  perc_fun2(HealthQ_pct_df$PSQI_Global_Pre[HealthQ_pct_df$County=="Elite"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C1_Pre[HealthQ_pct_df$County=="Elite"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C2_Pre[HealthQ_pct_df$County=="Elite"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C3_Pre[HealthQ_pct_df$County=="Elite"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C4_Pre[HealthQ_pct_df$County=="Elite"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C5_Pre[HealthQ_pct_df$County=="Elite"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C6_Pre[HealthQ_pct_df$County=="Elite"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C7_Pre[HealthQ_pct_df$County=="Elite"]),
+  perc_fun2(HealthQ_pct_df$PHQ9_Tot_Pre[HealthQ_pct_df$County=="Non-Elite"]),
+  perc_fun2(HealthQ_pct_df$GAD7_Tot_Pre[HealthQ_pct_df$County=="Non-Elite"]),
+  perc_fun2(HealthQ_pct_df$NBQ_Tot_Pre[HealthQ_pct_df$County=="Non-Elite"]),
+  perc_fun2(HealthQ_pct_df$MIDAS_Tot_Pre[HealthQ_pct_df$County=="Non-Elite"]),
+  perc_fun2(HealthQ_pct_df$PSQI_Global_Pre[HealthQ_pct_df$County=="Non-Elite"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C1_Pre[HealthQ_pct_df$County=="Non-Elite"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C2_Pre[HealthQ_pct_df$County=="Non-Elite"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C3_Pre[HealthQ_pct_df$County=="Non-Elite"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C4_Pre[HealthQ_pct_df$County=="Non-Elite"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C5_Pre[HealthQ_pct_df$County=="Non-Elite"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C6_Pre[HealthQ_pct_df$County=="Non-Elite"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C7_Pre[HealthQ_pct_df$County=="Non-Elite"]),
+  perc_fun2(HealthQ_pct_df$PHQ9_Tot_Pre[HealthQ_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(HealthQ_pct_df$GAD7_Tot_Pre[HealthQ_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(HealthQ_pct_df$NBQ_Tot_Pre[HealthQ_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(HealthQ_pct_df$MIDAS_Tot_Pre[HealthQ_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(HealthQ_pct_df$PSQI_Global_Pre[HealthQ_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C1_Pre[HealthQ_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C2_Pre[HealthQ_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C3_Pre[HealthQ_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C4_Pre[HealthQ_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C5_Pre[HealthQ_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C6_Pre[HealthQ_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C7_Pre[HealthQ_pct_df$ConHis_Diag=="Yes"]),
+  perc_fun2(HealthQ_pct_df$PHQ9_Tot_Pre[HealthQ_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(HealthQ_pct_df$GAD7_Tot_Pre[HealthQ_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(HealthQ_pct_df$NBQ_Tot_Pre[HealthQ_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(HealthQ_pct_df$MIDAS_Tot_Pre[HealthQ_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(HealthQ_pct_df$PSQI_Global_Pre[HealthQ_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C1_Pre[HealthQ_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C2_Pre[HealthQ_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C3_Pre[HealthQ_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C4_Pre[HealthQ_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C5_Pre[HealthQ_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C6_Pre[HealthQ_pct_df$ConHis_Diag=="No"]),
+  perc_fun2(HealthQ_pct_df$PSQI_C7_Pre[HealthQ_pct_df$ConHis_Diag=="No"]))
+
+colnames(HealthQ_pct_t1)<-names_perc
+HealthQ_pct_t1<-as_tibble(HealthQ_pct_t1)
+
+HealthQ_Outcomes<-rep(c("Patient Health Questionnaire-9","Generalised Anxiety Disorder-7","Neck Bournemouth Questionnaire","Migraine Disability Index","Pittsburgh Sleep Quality Index","Component 1: Subjective Sleep Quality","Component 2: Sleep Latency","Component 3: Sleep Duration","Component 4: Sleep Efficiency","Component 5: Sleep Disturbance","Component 6: Use of Sleep Medication","Component 7: Daytime Dysfunction"),7)
+HealthQ_pct_t1<-HealthQ_pct_t1 %>% 
+  mutate(Outcome=HealthQ_Outcomes) %>%
+  select(Outcome, everything())
+
+Participants_HealthQ<-c("All","","","","","","","","","","","",
+                       "Adolescent","","","","","","","","","","","",
+                       "Adult","","","","","","","","","","","",
+                       "Elite","","","","","","","","","","","",
+                       "Non-Elite","","","","","","","","","","","",
+                       "Concussion History","","","","","","","","","","","",
+                       "No Concussion History","","","","","","","","","","","")
+HealthQ_pct_t1<-HealthQ_pct_t1 %>%
+  mutate(Participants=Participants_HealthQ) %>%
+  select(Participants, everything())
+
+HealthQ_pct_ft1<-flextable(HealthQ_pct_t1)
+HealthQ_pct_ft1<-colformat_double(HealthQ_pct_ft1,digits=1)
+HealthQ_pct_ft1<-border_remove(HealthQ_pct_ft1)
+HealthQ_pct_ft1<-hline_top(HealthQ_pct_ft1,border=fp_border(width=0.5))
+HealthQ_pct_ft1<-italic(HealthQ_pct_ft1,part="header")
+HealthQ_pct_ft1<-bold(HealthQ_pct_ft1,part="header")
+HealthQ_pct_ft1<-italic(HealthQ_pct_ft1,j=1:2)
+HealthQ_pct_ft1<-flextable::align(HealthQ_pct_ft1,align="center",part="header")
+HealthQ_pct_ft1
+```
+
+### 6.1. Percentiles for Clinical Tests
+
+#### 6.1.1. Percentiles for Clinical Tests, All Participants
+```{r Clinical tests percentiles (all participants)}
+
+##Create dataframe of variables
+clinical_tests_df2<-normative_dat %>%
+  select(Age_Group,County,ConHis_Diag,ImPACT_Verbal_Mem_Score_Pre:ImPACT_Impulse_Control_Score_Pre,PCSS_TSS_Pre,SCAT5_GSC_TSS_Pre:SCAT5_Neuro_Time_TG_Pre,SCAT5_BESS_Tot_Pre,SCAT5_BESS_DL_Pre:SCAT5_BESS_Tandem_Stance_Pre,VOMS_SP_Tot_Pre:VOMS_NPC_Pre,Neck_Flex_Avg_Pre:Neck_SCM_ND_Avg_Pre)
+
+clinical_tests_pct_t1<-rbind(
+  perc_fun(clinical_tests_df2$ImPACT_Verbal_Mem_Score_Pre),
+  perc_fun(clinical_tests_df2$ImPACT_Visual_Mem_Score_Pre),
+  perc_fun(clinical_tests_df2$ImPACT_Visual_Motor_Score_Pre),
+  perc_fun2(clinical_tests_df2$ImPACT_Reaction_Time_Score_Pre),
+  perc_fun2(clinical_tests_df2$PCSS_TSS_Pre),
+  perc_fun2(clinical_tests_df2$SCAT5_GSC_TSS_Pre),
+  perc_fun2(clinical_tests_df2$SCAT5_GSC_TSS_Pre),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Orient_Pre),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Mem_Pre),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Dig_Pre),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Months_Pre),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Con_Pre),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Mem_Delay_Pre),
+  perc_fun2(clinical_tests_df2$SCAT5_Neuro_FTN_Time_Pre),
+  perc_fun2(clinical_tests_df2$SCAT5_Neuro_Time_TG_Pre),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_Tot_Pre),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_DL_Pre),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_SL_Pre),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_Tandem_Stance_Pre),
+  perc_fun2(clinical_tests_df2$VOMS_SP_Tot_Pre),
+  perc_fun2(clinical_tests_df2$VOMS_Sacc_H_Tot_Pre),
+  perc_fun2(clinical_tests_df2$VOMS_Sacc_V_Tot_Pre),
+  perc_fun2(clinical_tests_df2$VOMS_Converg_Tot_Pre),
+  perc_fun2(clinical_tests_df2$VOMS_VOR_H_Tot_Pre),
+  perc_fun2(clinical_tests_df2$VOMS_VOR_V_Tot_Pre),
+  perc_fun2(clinical_tests_df2$VOMS_VMS_Tot_Pre),
+  perc_fun2(clinical_tests_df2$VOMS_NPC_Pre),
+  perc_fun(clinical_tests_df2$Neck_Flex_Avg_Pre),
+  perc_fun(clinical_tests_df2$Neck_Ext_Avg_Pre),
+  perc_fun(clinical_tests_df2$Neck_LatFlex_D_Avg_Pre),
+  perc_fun(clinical_tests_df2$Neck_LatFlex_ND_Avg_Pre),
+  perc_fun(clinical_tests_df2$Neck_SCM_D_Avg_Pre),
+  perc_fun(clinical_tests_df2$Neck_SCM_ND_Avg_Pre))
+
+names_perc<-c("Impaired (<1.9th %ile)","Borderline (9th %ile)","Low Average (24th %ile)","Average (75th %ile)","High Average (90th %ile)","Superior (97th %ile)","Very Superior (>98th %ile)")
+colnames(clinical_tests_pct_t1)<-names_perc
+clinical_tests_pct_t1<-as_tibble(clinical_tests_pct_t1)
+
+Outcome<-c("Verbal Memory","Visual Memory","Visual Motor Speed","Reaction Time","Post-Concussion Symptom Score","Total Symptom Score","Symptom Severity Score","Orientation","Immediate Memory","Digits Backwards","Months Backwards","Concentration","Delayed Recall","Finger-to-Nose test, time","Tandem Gait, time","Balance Error Scoring System Total","Double-Leg Stance","Single-Leg Stance","Tandem Gait Stance","Smooth Pursuits","Horizontal Saccades","Vertical Saccades","Convergence","Horizontal Vestibulo-Ocular Reflex","Vertical Vestibulo-Ocular Reflex","Visual Motion Sensitivity","Near Point of Convergence, cm","Neck Flexion, newtons","Neck Extension, newtons","Dominant Side Lateral Flexion, newtons","Non-Dominant Side Lateral Flexion, newtons","Dominant Side Rotation, newtons","Non-Dominant Side Rotation, newtons")
+
+clinical_tests_pct_t1<-clinical_tests_pct_t1 %>%
+  add_column(Outcome,.before="Impaired (<1.9th %ile)")
+clinical_tests_pct_t1<-clinical_tests_pct_t1 %>%
+  mutate_if(is.numeric,~round(.,2))
+clinical_tests_pct_t1<-clinical_tests_pct_t1 %>%
+  mutate(across(-Outcome,~gsub("-","",.)))
+
+clinical_tests_pct_ft1<-flextable(clinical_tests_pct_t1)
+clinical_tests_pct_ft1<-colformat_double(clinical_tests_pct_ft1,digits=2)
+clinical_tests_pct_ft1<-border_remove(clinical_tests_pct_ft1)
+clinical_tests_pct_ft1<-hline_top(clinical_tests_pct_ft1,border=fp_border(width=0.5))
+clinical_tests_pct_ft1<-italic(clinical_tests_pct_ft1,j=1,part="body")
+clinical_tests_pct_ft1
+```
+
+#### 6.1.2. Percentiles for Clinical Tests, Stratified by Age
+```{r Clinical test percentiles by age}
+
+clinical_tests_pct_t2<-rbind(
+  perc_fun(clinical_tests_df2$ImPACT_Verbal_Mem_Score_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun(clinical_tests_df2$ImPACT_Verbal_Mem_Score_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun(clinical_tests_df2$ImPACT_Visual_Mem_Score_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun(clinical_tests_df2$ImPACT_Visual_Mem_Score_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun(clinical_tests_df2$ImPACT_Visual_Motor_Score_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun(clinical_tests_df2$ImPACT_Visual_Motor_Score_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun2(clinical_tests_df2$ImPACT_Reaction_Time_Score_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun2(clinical_tests_df2$ImPACT_Reaction_Time_Score_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun2(clinical_tests_df2$PCSS_TSS_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun2(clinical_tests_df2$PCSS_TSS_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun2(clinical_tests_df2$SCAT5_GSC_TSS_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun2(clinical_tests_df2$SCAT5_GSC_TSS_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun2(clinical_tests_df2$SCAT5_GSC_TSS_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun2(clinical_tests_df2$SCAT5_GSC_TSS_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Orient_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Orient_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Mem_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Mem_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Dig_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Dig_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Months_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Months_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Con_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Con_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Mem_Delay_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Mem_Delay_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun2(clinical_tests_df2$SCAT5_Neuro_FTN_Time_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun2(clinical_tests_df2$SCAT5_Neuro_FTN_Time_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun2(clinical_tests_df2$SCAT5_Neuro_Time_TG_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun2(clinical_tests_df2$SCAT5_Neuro_Time_TG_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_Tot_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_Tot_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_DL_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_DL_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_SL_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_SL_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_Tandem_Stance_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_Tandem_Stance_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun2(clinical_tests_df2$VOMS_SP_Tot_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun2(clinical_tests_df2$VOMS_SP_Tot_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun2(clinical_tests_df2$VOMS_Sacc_H_Tot_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun2(clinical_tests_df2$VOMS_Sacc_H_Tot_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun2(clinical_tests_df2$VOMS_Sacc_V_Tot_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun2(clinical_tests_df2$VOMS_Sacc_V_Tot_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun2(clinical_tests_df2$VOMS_Converg_Tot_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun2(clinical_tests_df2$VOMS_Converg_Tot_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun2(clinical_tests_df2$VOMS_VOR_H_Tot_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun2(clinical_tests_df2$VOMS_VOR_H_Tot_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun2(clinical_tests_df2$VOMS_VOR_V_Tot_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun2(clinical_tests_df2$VOMS_VOR_V_Tot_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun2(clinical_tests_df2$VOMS_VMS_Tot_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun2(clinical_tests_df2$VOMS_VMS_Tot_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun2(clinical_tests_df2$VOMS_NPC_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun2(clinical_tests_df2$VOMS_NPC_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun(clinical_tests_df2$Neck_Flex_Avg_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun(clinical_tests_df2$Neck_Flex_Avg_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun(clinical_tests_df2$Neck_Ext_Avg_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun(clinical_tests_df2$Neck_Ext_Avg_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun(clinical_tests_df2$Neck_LatFlex_D_Avg_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun(clinical_tests_df2$Neck_LatFlex_D_Avg_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun(clinical_tests_df2$Neck_LatFlex_ND_Avg_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun(clinical_tests_df2$Neck_LatFlex_ND_Avg_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun(clinical_tests_df2$Neck_SCM_D_Avg_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun(clinical_tests_df2$Neck_SCM_D_Avg_Pre[clinical_tests_df2$Age_Group=="Adult"]),
+  perc_fun(clinical_tests_df2$Neck_SCM_ND_Avg_Pre[clinical_tests_df2$Age_Group=="Adolescent"]),
+  perc_fun(clinical_tests_df2$Neck_SCM_ND_Avg_Pre[clinical_tests_df2$Age_Group=="Adult"]))
+
+colnames(clinical_tests_pct_t2)<-names_perc
+clinical_tests_pct_t2<-as_tibble(clinical_tests_pct_t2)
+
+Outcome2<-c("Verbal Memory","","Visual Memory","","Visual Motor Speed","","Reaction Time","","Post-Concussion Symptom Score","","Total Symptom Score","","Symptom Severity Score","","Orientation","","Immediate Memory","","Digits Backwards","","Months Backwards","","Concentration","","Delayed Recall","","Finger-to-Nose test, time","","Tandem Gait, time","","Balance Error Scoring System Total","","Double-Leg Stance","","Single-Leg Stance","","Tandem Gait Stance","","Smooth Pursuits","","Horizontal Saccades","","Vertical Saccades","","Convergence","","Horizontal Vestibulo-Ocular Reflex","","Vertical Vestibulo-Ocular Reflex","","Visual Motion Sensitivity","","Near Point of Convergence, cm","","Neck Flexion, newtons","","Neck Extension, newtons","","Dominant Side Lateral Flexion, newtons","","Non-Dominant Side Lateral Flexion, newtons","","Dominant Side Rotation, newtons","","Non-Dominant Side Rotation, newtons","")
+Age<-rep(c("Adolescent","Adult"),33)
+
+clinical_tests_pct_t2<-clinical_tests_pct_t2 %>%
+  add_column(Outcome2,.before="Impaired (<1.9th %ile)") %>%
+  add_column(Age,.after="Outcome2")
+clinical_tests_pct_t2<-clinical_tests_pct_t2 %>%
+  dplyr::rename(Outcome=Outcome2)
+clinical_tests_pct_t2<-clinical_tests_pct_t2 %>%
+  mutate_if(is.numeric,~round(.,2))
+clinical_tests_pct_t2<-clinical_tests_pct_t2 %>%
+  mutate(across(-Outcome,~gsub("-","",.)))
+
+clinical_tests_pct_ft2<-flextable(clinical_tests_pct_t2)
+clinical_tests_pct_ft2<-colformat_double(clinical_tests_pct_ft2,digits=2)
+clinical_tests_pct_ft2<-border_remove(clinical_tests_pct_ft2)
+clinical_tests_pct_ft2<-hline_top(clinical_tests_pct_ft2,border=fp_border(width=0.5))
+clinical_tests_pct_ft2<-italic(clinical_tests_pct_ft2,j=1,part="body")
+clinical_tests_pct_ft2
+```
+
+#### 6.1.3. Percentiles for Clinical Tests, Stratified by Level of Play
+```{r Clinical test percentiles by level}
+
+clinical_tests_pct_t3<-rbind(
+  perc_fun(clinical_tests_df2$ImPACT_Verbal_Mem_Score_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun(clinical_tests_df2$ImPACT_Verbal_Mem_Score_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun(clinical_tests_df2$ImPACT_Visual_Mem_Score_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun(clinical_tests_df2$ImPACT_Visual_Mem_Score_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun(clinical_tests_df2$ImPACT_Visual_Motor_Score_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun(clinical_tests_df2$ImPACT_Visual_Motor_Score_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun2(clinical_tests_df2$ImPACT_Reaction_Time_Score_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun2(clinical_tests_df2$ImPACT_Reaction_Time_Score_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun2(clinical_tests_df2$PCSS_TSS_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun2(clinical_tests_df2$PCSS_TSS_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun2(clinical_tests_df2$SCAT5_GSC_TSS_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun2(clinical_tests_df2$SCAT5_GSC_TSS_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun2(clinical_tests_df2$SCAT5_GSC_TSS_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun2(clinical_tests_df2$SCAT5_GSC_TSS_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Orient_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Orient_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Mem_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Mem_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Dig_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Dig_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Months_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Months_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Con_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Con_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Mem_Delay_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Mem_Delay_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun2(clinical_tests_df2$SCAT5_Neuro_FTN_Time_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun2(clinical_tests_df2$SCAT5_Neuro_FTN_Time_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun2(clinical_tests_df2$SCAT5_Neuro_Time_TG_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun2(clinical_tests_df2$SCAT5_Neuro_Time_TG_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_Tot_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_Tot_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_DL_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_DL_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_SL_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_SL_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_Tandem_Stance_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_Tandem_Stance_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun2(clinical_tests_df2$VOMS_SP_Tot_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun2(clinical_tests_df2$VOMS_SP_Tot_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun2(clinical_tests_df2$VOMS_Sacc_H_Tot_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun2(clinical_tests_df2$VOMS_Sacc_H_Tot_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun2(clinical_tests_df2$VOMS_Sacc_V_Tot_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun2(clinical_tests_df2$VOMS_Sacc_V_Tot_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun2(clinical_tests_df2$VOMS_Converg_Tot_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun2(clinical_tests_df2$VOMS_Converg_Tot_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun2(clinical_tests_df2$VOMS_VOR_H_Tot_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun2(clinical_tests_df2$VOMS_VOR_H_Tot_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun2(clinical_tests_df2$VOMS_VOR_V_Tot_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun2(clinical_tests_df2$VOMS_VOR_V_Tot_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun2(clinical_tests_df2$VOMS_VMS_Tot_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun2(clinical_tests_df2$VOMS_VMS_Tot_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun2(clinical_tests_df2$VOMS_NPC_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun2(clinical_tests_df2$VOMS_NPC_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun(clinical_tests_df2$Neck_Flex_Avg_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun(clinical_tests_df2$Neck_Flex_Avg_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun(clinical_tests_df2$Neck_Ext_Avg_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun(clinical_tests_df2$Neck_Ext_Avg_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun(clinical_tests_df2$Neck_LatFlex_D_Avg_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun(clinical_tests_df2$Neck_LatFlex_D_Avg_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun(clinical_tests_df2$Neck_LatFlex_ND_Avg_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun(clinical_tests_df2$Neck_LatFlex_ND_Avg_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun(clinical_tests_df2$Neck_SCM_D_Avg_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun(clinical_tests_df2$Neck_SCM_D_Avg_Pre[clinical_tests_df2$County=="Non-Elite"]),
+  perc_fun(clinical_tests_df2$Neck_SCM_ND_Avg_Pre[clinical_tests_df2$County=="Elite"]),
+  perc_fun(clinical_tests_df2$Neck_SCM_ND_Avg_Pre[clinical_tests_df2$County=="Non-Elite"]))
+
+colnames(clinical_tests_pct_t3)<-names_perc
+clinical_tests_pct_t3<-as_tibble(clinical_tests_pct_t3)
+
+Level<-rep(c("Elite","Non-Elite"),33)
+
+clinical_tests_pct_t3<-clinical_tests_pct_t3 %>%
+  add_column(Outcome2,.before="Impaired (<1.9th %ile)") %>%
+  add_column(Level,.after="Outcome2")
+clinical_tests_pct_t3<-clinical_tests_pct_t3 %>%
+  dplyr::rename(Outcome=Outcome2,
+         'Level of Play'=Level)
+clinical_tests_pct_t3<-clinical_tests_pct_t3 %>%
+  mutate_if(is.numeric,~round(.,2))
+clinical_tests_pct_t3<-clinical_tests_pct_t3 %>%
+  mutate(across(-c(Outcome,'Level of Play'),~gsub("-","",.)))
+
+clinical_tests_pct_ft3<-flextable(clinical_tests_pct_t3)
+clinical_tests_pct_ft3<-border_remove(clinical_tests_pct_ft3)
+clinical_tests_pct_ft3<-hline_top(clinical_tests_pct_ft3,border=fp_border(width=0.5))
+clinical_tests_pct_ft3<-flextable::align(clinical_tests_pct_ft3,i=1:66,j=3:9,align="center")
+clinical_tests_pct_ft3<-italic(clinical_tests_pct_ft3,j=1,part="body")
+clinical_tests_pct_ft3
+```
+
+#### 6.1.4. Percentiles for Clinical Tests, Stratified by Concussion History
+```{r Clinical test percentiles by concussion history}
+
+clinical_tests_pct_t4<-rbind(
+  perc_fun(clinical_tests_df2$ImPACT_Verbal_Mem_Score_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun(clinical_tests_df2$ImPACT_Verbal_Mem_Score_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun(clinical_tests_df2$ImPACT_Visual_Mem_Score_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun(clinical_tests_df2$ImPACT_Visual_Mem_Score_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun(clinical_tests_df2$ImPACT_Visual_Motor_Score_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun(clinical_tests_df2$ImPACT_Visual_Motor_Score_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun2(clinical_tests_df2$ImPACT_Reaction_Time_Score_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(clinical_tests_df2$ImPACT_Reaction_Time_Score_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun2(clinical_tests_df2$PCSS_TSS_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(clinical_tests_df2$PCSS_TSS_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun2(clinical_tests_df2$SCAT5_GSC_TSS_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(clinical_tests_df2$SCAT5_GSC_TSS_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun2(clinical_tests_df2$SCAT5_GSC_TSS_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(clinical_tests_df2$SCAT5_GSC_TSS_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Orient_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Orient_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Mem_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Mem_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Dig_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Dig_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Months_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Months_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Con_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Con_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Mem_Delay_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun(clinical_tests_df2$SCAT5_SAC_Mem_Delay_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun2(clinical_tests_df2$SCAT5_Neuro_FTN_Time_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(clinical_tests_df2$SCAT5_Neuro_FTN_Time_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun2(clinical_tests_df2$SCAT5_Neuro_Time_TG_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(clinical_tests_df2$SCAT5_Neuro_Time_TG_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_Tot_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_Tot_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_DL_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_DL_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_SL_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_SL_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_Tandem_Stance_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(clinical_tests_df2$SCAT5_BESS_Tandem_Stance_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun2(clinical_tests_df2$VOMS_SP_Tot_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(clinical_tests_df2$VOMS_SP_Tot_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun2(clinical_tests_df2$VOMS_Sacc_H_Tot_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(clinical_tests_df2$VOMS_Sacc_H_Tot_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun2(clinical_tests_df2$VOMS_Sacc_V_Tot_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(clinical_tests_df2$VOMS_Sacc_V_Tot_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun2(clinical_tests_df2$VOMS_Converg_Tot_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(clinical_tests_df2$VOMS_Converg_Tot_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun2(clinical_tests_df2$VOMS_VOR_H_Tot_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(clinical_tests_df2$VOMS_VOR_H_Tot_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun2(clinical_tests_df2$VOMS_VOR_V_Tot_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(clinical_tests_df2$VOMS_VOR_V_Tot_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun2(clinical_tests_df2$VOMS_VMS_Tot_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(clinical_tests_df2$VOMS_VMS_Tot_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun2(clinical_tests_df2$VOMS_NPC_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(clinical_tests_df2$VOMS_NPC_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun(clinical_tests_df2$Neck_Flex_Avg_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun(clinical_tests_df2$Neck_Flex_Avg_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun(clinical_tests_df2$Neck_Ext_Avg_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun(clinical_tests_df2$Neck_Ext_Avg_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun(clinical_tests_df2$Neck_LatFlex_D_Avg_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun(clinical_tests_df2$Neck_LatFlex_D_Avg_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun(clinical_tests_df2$Neck_LatFlex_ND_Avg_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun(clinical_tests_df2$Neck_LatFlex_ND_Avg_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun(clinical_tests_df2$Neck_SCM_D_Avg_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun(clinical_tests_df2$Neck_SCM_D_Avg_Pre[clinical_tests_df2$ConHis_Diag=="No"]),
+  perc_fun(clinical_tests_df2$Neck_SCM_ND_Avg_Pre[clinical_tests_df2$ConHis_Diag=="Yes"]),
+  perc_fun(clinical_tests_df2$Neck_SCM_ND_Avg_Pre[clinical_tests_df2$ConHis_Diag=="No"]))
+
+colnames(clinical_tests_pct_t4)<-names_perc
+clinical_tests_pct_t4<-as_tibble(clinical_tests_pct_t4)
+ConHis<-rep(c("Yes","No"),33)
+clinical_tests_pct_t4<-clinical_tests_pct_t4 %>%
+  add_column(Outcome2,.before="Impaired (<1.9th %ile)") %>%
+  add_column(ConHis,.after="Outcome2")
+clinical_tests_pct_t4<-clinical_tests_pct_t4 %>%
+  dplyr::rename(Outcome=Outcome2,
+         'Concussion History'=ConHis)
+clinical_tests_pct_t4<-clinical_tests_pct_t4 %>%
+  mutate_if(is.numeric,~round(.,2))
+clinical_tests_pct_t4<-clinical_tests_pct_t4 %>%
+  mutate(across(-c(Outcome,'Concussion History'),~gsub("-","",.)))
+
+clinical_tests_pct_ft4<-flextable(clinical_tests_pct_t4)
+clinical_tests_pct_ft4<-colformat_double(clinical_tests_pct_ft4,digits=2)
+clinical_tests_pct_ft4<-border_remove(clinical_tests_pct_ft4)
+clinical_tests_pct_ft4<-hline_top(clinical_tests_pct_ft4,border=fp_border(width=0.5))
+clinical_tests_pct_ft4<-flextable::align(clinical_tests_pct_ft4,i=1:66,j=3:9,align="center")
+clinical_tests_pct_ft4<-italic(clinical_tests_pct_ft4,j=1,part="body")
+clinical_tests_pct_ft4
+```
+
+### 6.2. Percentiles for Health Questionnaires
+```{r Questionnaire percentiles (all participants)}
+
+##Create dataframe for variables
+questionnaires_df2<-normative_dat %>%
+  select(Age_Group,County,ConHis_Diag,CP_Tot_Pre,CP_Cog_Avg_Pre:CP_Neck_Avg_Pre,PHQ9_Tot_Pre,GAD7_Tot_Pre,NBQ_Tot_Pre,MIDAS_Tot_Pre,PSQI_Global_Pre,PSQI_C1_Pre:PSQI_C7_Pre)
+
+questionnaires_pct_t1<-data.frame(t(sapply(questionnaires_df2[-c(1:3)],perc_fun2)))
+
+colnames(questionnaires_pct_t1)<-names_perc
+clinical_tests_pct_t1<-as_tibble(clinical_tests_pct_t1)
+Outcome3<-c("Clinical Profiles Screen Total","Cognitive/Fatigue","Ocular","Anxiety/Mood","Migraine","Vestibular","Sleep","Neck","Patient Health Questionnaire-9","Generalised Anxiety Disorder-7","Neck Bournemouth Questionnaire","Migraine Disability Assessment","Pittsburgh Sleep Quality Index","Component 1: Subjective Sleep Quality","Component 2: Sleep Latency","Component 3: Sleep Duration","Component 4: Sleep Efficiency","Component 5: Sleep Disturbance","Component 6:Use of Sleep Medication","Component 7: Daytime Dysfunction")
+questionnaires_pct_t1<-questionnaires_pct_t1 %>% 
+  add_column(Outcome3,.before="Impaired (<1.9th %ile)")
+questionnaires_pct_t1<-questionnaires_pct_t1 %>%
+  dplyr::rename(Outcome=Outcome3)
+questionnaires_pct_t1<-questionnaires_pct_t1 %>%
+  mutate_if(is.numeric,~round(.,2))
+questionnaires_pct_t1<-questionnaires_pct_t1 %>%
+  mutate(across(-Outcome,~gsub("-","",.)))
+
+questionnaires_pct_ft1<-flextable(questionnaires_pct_t1)
+questionnaires_pct_ft1<-colformat_double(questionnaires_pct_ft1,digits=2)
+questionnaires_pct_ft1<-border_remove(questionnaires_pct_ft1)
+questionnaires_pct_ft1<-hline_top(questionnaires_pct_ft1,border=fp_border(width=0.5))
+questionnaires_pct_ft1<-bold(questionnaires_pct_ft1,i=c(1,9,10,11,12,13),j=1)
+questionnaires_pct_ft1<-italic(questionnaires_pct_ft1,j=1)
+questionnaires_pct_ft1
+```
+## 6.2. Percentiles for Health Questionnaires
+
+### 6.2.2. Percentiles for Health Questionnaires, Stratified by Age
+```{r Health questionnaires by age}
+
+questionnaires_pct_t2<-rbind(
+  perc_fun2(questionnaires_df2$CP_Tot_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$CP_Tot_Pre[questionnaires_df2$Age_Group=="Adult"]),
+  perc_fun2(questionnaires_df2$CP_Cog_Avg_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$CP_Cog_Avg_Pre[questionnaires_df2$Age_Group=="Adult"]),
+  perc_fun2(questionnaires_df2$CP_Ocu_Avg_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$CP_Ocu_Avg_Pre[questionnaires_df2$Age_Group=="Adult"]),
+  perc_fun2(questionnaires_df2$CP_Anx_Avg_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$CP_Anx_Avg_Pre[questionnaires_df2$Age_Group=="Adult"]),
+  perc_fun2(questionnaires_df2$CP_Mig_Avg_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$CP_Mig_Avg_Pre[questionnaires_df2$Age_Group=="Adult"]),
+  perc_fun2(questionnaires_df2$CP_Vest_Avg_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$CP_Vest_Avg_Pre[questionnaires_df2$Age_Group=="Adult"]),
+  perc_fun2(questionnaires_df2$CP_Sleep_Avg_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$CP_Sleep_Avg_Pre[questionnaires_df2$Age_Group=="Adult"]),
+  perc_fun2(questionnaires_df2$CP_Neck_Avg_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$CP_Neck_Avg_Pre[questionnaires_df2$Age_Group=="Adult"]),
+  perc_fun2(questionnaires_df2$PHQ9_Tot_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$PHQ9_Tot_Pre[questionnaires_df2$Age_Group=="Adult"]),
+  perc_fun2(questionnaires_df2$GAD7_Tot_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$GAD7_Tot_Pre[questionnaires_df2$Age_Group=="Adult"]),
+  perc_fun2(questionnaires_df2$NBQ_Tot_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$NBQ_Tot_Pre[questionnaires_df2$Age_Group=="Adult"]),
+  perc_fun2(questionnaires_df2$MIDAS_Tot_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$MIDAS_Tot_Pre[questionnaires_df2$Age_Group=="Adult"]),
+  perc_fun2(questionnaires_df2$PSQI_Global_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$PSQI_Global_Pre[questionnaires_df2$Age_Group=="Adult"]),
+  perc_fun2(questionnaires_df2$PSQI_C1_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$PSQI_C1_Pre[questionnaires_df2$Age_Group=="Adult"]),
+  perc_fun2(questionnaires_df2$PSQI_C2_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$PSQI_C2_Pre[questionnaires_df2$Age_Group=="Adult"]),
+  perc_fun2(questionnaires_df2$PSQI_C3_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$PSQI_C3_Pre[questionnaires_df2$Age_Group=="Adult"]),
+  perc_fun2(questionnaires_df2$PSQI_C4_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$PSQI_C4_Pre[questionnaires_df2$Age_Group=="Adult"]),
+  perc_fun2(questionnaires_df2$PSQI_C5_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$PSQI_C5_Pre[questionnaires_df2$Age_Group=="Adult"]),
+  perc_fun2(questionnaires_df2$PSQI_C6_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$PSQI_C6_Pre[questionnaires_df2$Age_Group=="Adult"]),
+  perc_fun2(questionnaires_df2$PSQI_C7_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$PSQI_C7_Pre[questionnaires_df2$Age_Group=="Adult"]))
+
+colnames(questionnaires_pct_t2)<-names_perc
+questionnaires_pct_t2<-as_tibble(questionnaires_pct_t2)
+Outcome4<-c("Clinical Profiles Screen Total","","Cognitive/Fatigue","","Ocular","","Anxiety/Mood","","Migraine","","Vestibular","","Sleep","","Neck","","Patient Health Questionnaire-9","","Generalised Anxiety Disorder-7","","Neck Bournemouth Questionnaire","","Migraine Disability Assessment","","Pittsburgh Sleep Quality Index","","Component 1: Subjective Sleep Quality","","Component 2: Sleep Latency","","Component 3: Sleep Duration","","Component 4: Sleep Efficiency","","Component 5: Sleep Disturbance","","Component 6:Use of Sleep Medication","","Component 7: Daytime Dysfunction","")
+Age2<-rep(c("Adolescent","Adult"),20)
+questionnaires_pct_t2<-questionnaires_pct_t2 %>% 
+  add_column(Outcome4,.before="Impaired (<1.9th %ile)") %>%
+  add_column(Age2,.after="Outcome4")
+questionnaires_pct_t2<-questionnaires_pct_t2 %>%
+  dplyr::rename(Outcome=Outcome4,
+         Age=Age2)
+questionnaires_pct_t2<-questionnaires_pct_t2 %>%
+  mutate_if(is.numeric,~round(.,2))
+questionnaires_pct_t2<-questionnaires_pct_t2 %>%
+  mutate(across(-c(Outcome,Age),~gsub("-","",.)))
+
+questionnaires_pct_ft2<-flextable(questionnaires_pct_t2)
+questionnaires_pct_ft2<-border_remove(questionnaires_pct_ft2)
+questionnaires_pct_ft2<-hline_top(questionnaires_pct_ft2,border=fp_border(width=0.5))
+questionnaires_pct_ft2<-flextable::align(questionnaires_pct_ft2,i=1:40,j=3:9,align="center")
+questionnaires_pct_ft2<-bold(questionnaires_pct_ft2,i=c(1,17,19,21,23,25),j=1)
+questionnaires_pct_ft2<-italic(questionnaires_pct_ft2,j=1)
+questionnaires_pct_ft2
+```
+
+### 6.2.3. Percentiles for Health Questionnaires, Stratified by Level of Play
+
+```{r Health questionnaires by level}
+
+questionnaires_pct_t3<-rbind(
+  perc_fun2(questionnaires_df2$CP_Tot_Pre[questionnaires_df2$County=="Elite"]),
+  perc_fun2(questionnaires_df2$CP_Tot_Pre[questionnaires_df2$County=="Non-Elite"]),
+  perc_fun2(questionnaires_df2$CP_Cog_Avg_Pre[questionnaires_df2$County=="Elite"]),
+  perc_fun2(questionnaires_df2$CP_Cog_Avg_Pre[questionnaires_df2$County=="Non-Elite"]),
+  perc_fun2(questionnaires_df2$CP_Ocu_Avg_Pre[questionnaires_df2$County=="Elite"]),
+  perc_fun2(questionnaires_df2$CP_Ocu_Avg_Pre[questionnaires_df2$County=="Non-Elite"]),
+  perc_fun2(questionnaires_df2$CP_Anx_Avg_Pre[questionnaires_df2$County=="Elite"]),
+  perc_fun2(questionnaires_df2$CP_Anx_Avg_Pre[questionnaires_df2$County=="Non-Elite"]),
+  perc_fun2(questionnaires_df2$CP_Mig_Avg_Pre[questionnaires_df2$County=="Elite"]),
+  perc_fun2(questionnaires_df2$CP_Mig_Avg_Pre[questionnaires_df2$County=="Non-Elite"]),
+  perc_fun2(questionnaires_df2$CP_Vest_Avg_Pre[questionnaires_df2$County=="Elite"]),
+  perc_fun2(questionnaires_df2$CP_Vest_Avg_Pre[questionnaires_df2$Age_Group=="Adult"]),
+  perc_fun2(questionnaires_df2$CP_Sleep_Avg_Pre[questionnaires_df2$County=="Non-Elite"]),
+  perc_fun2(questionnaires_df2$CP_Sleep_Avg_Pre[questionnaires_df2$County=="Elite"]),
+  perc_fun2(questionnaires_df2$CP_Neck_Avg_Pre[questionnaires_df2$County=="Non-Elite"]),
+  perc_fun2(questionnaires_df2$CP_Neck_Avg_Pre[questionnaires_df2$County=="Elite"]),
+  perc_fun2(questionnaires_df2$PHQ9_Tot_Pre[questionnaires_df2$Age_Group=="Adolescent"]),
+  perc_fun2(questionnaires_df2$PHQ9_Tot_Pre[questionnaires_df2$County=="Non-Elite"]),
+  perc_fun2(questionnaires_df2$GAD7_Tot_Pre[questionnaires_df2$County=="Elite"]),
+  perc_fun2(questionnaires_df2$GAD7_Tot_Pre[questionnaires_df2$County=="Non-Elite"]),
+  perc_fun2(questionnaires_df2$NBQ_Tot_Pre[questionnaires_df2$County=="Elite"]),
+  perc_fun2(questionnaires_df2$NBQ_Tot_Pre[questionnaires_df2$County=="Non-Elite"]),
+  perc_fun2(questionnaires_df2$MIDAS_Tot_Pre[questionnaires_df2$County=="Elite"]),
+  perc_fun2(questionnaires_df2$MIDAS_Tot_Pre[questionnaires_df2$County=="Non-Elite"]),
+  perc_fun2(questionnaires_df2$PSQI_Global_Pre[questionnaires_df2$County=="Elite"]),
+  perc_fun2(questionnaires_df2$PSQI_Global_Pre[questionnaires_df2$County=="Non-Elite"]),
+  perc_fun2(questionnaires_df2$PSQI_C1_Pre[questionnaires_df2$County=="Elite"]),
+  perc_fun2(questionnaires_df2$PSQI_C1_Pre[questionnaires_df2$County=="Non-Elite"]),
+  perc_fun2(questionnaires_df2$PSQI_C2_Pre[questionnaires_df2$County=="Elite"]),
+  perc_fun2(questionnaires_df2$PSQI_C2_Pre[questionnaires_df2$County=="Non-Elite"]),
+  perc_fun2(questionnaires_df2$PSQI_C3_Pre[questionnaires_df2$County=="Elite"]),
+  perc_fun2(questionnaires_df2$PSQI_C3_Pre[questionnaires_df2$County=="Non-Elite"]),
+  perc_fun2(questionnaires_df2$PSQI_C4_Pre[questionnaires_df2$County=="Elite"]),
+  perc_fun2(questionnaires_df2$PSQI_C4_Pre[questionnaires_df2$County=="Non-Elite"]),
+  perc_fun2(questionnaires_df2$PSQI_C5_Pre[questionnaires_df2$County=="Elite"]),
+  perc_fun2(questionnaires_df2$PSQI_C5_Pre[questionnaires_df2$County=="Non-Elite"]),
+  perc_fun2(questionnaires_df2$PSQI_C6_Pre[questionnaires_df2$County=="Elite"]),
+  perc_fun2(questionnaires_df2$PSQI_C6_Pre[questionnaires_df2$County=="Non-Elite"]),
+  perc_fun2(questionnaires_df2$PSQI_C7_Pre[questionnaires_df2$County=="Elite"]),
+  perc_fun2(questionnaires_df2$PSQI_C7_Pre[questionnaires_df2$County=="Non-Elite"]))
+
+colnames(questionnaires_pct_t3)<-names_perc
+questionnaires_pct_t3<-as_tibble(questionnaires_pct_t3)
+Level2<-rep(c("Elite","Non-Elite"),20)
+questionnaires_pct_t3<-questionnaires_pct_t3 %>% 
+  add_column(Outcome4,.before="Impaired (<1.9th %ile)") %>%
+  add_column(Level2,.after="Outcome4")
+questionnaires_pct_t3<-questionnaires_pct_t3 %>%
+  dplyr::rename(Outcome=Outcome4,
+         'Level of Play'=Level2)
+questionnaires_pct_t3<-questionnaires_pct_t3 %>%
+  mutate_if(is.numeric,~round(.,2))
+questionnaires_pct_t3<-questionnaires_pct_t3 %>%
+  mutate(across(-c(Outcome,'Level of Play'),~gsub("-","",.)))
+
+questionnaires_pct_ft3<-flextable(questionnaires_pct_t3)
+questionnaires_pct_ft3<-colformat_double(questionnaires_pct_ft3,digits=2)
+questionnaires_pct_ft3<-border_remove(questionnaires_pct_ft3)
+questionnaires_pct_ft3<-hline_top(questionnaires_pct_ft3,border=fp_border(width=0.5))
+questionnaires_pct_ft3<-flextable::align(questionnaires_pct_ft3,i=1:40,j=3:9,align="center")
+questionnaires_pct_ft3<-bold(questionnaires_pct_ft3,i=c(1,17,19,21,23,25),j=1)
+questionnaires_pct_ft3<-italic(questionnaires_pct_ft3,j=1)
+questionnaires_pct_ft3
+```
+### 6.2.4. Percentiles for Health Questionnaires, Stratified by Concussion History
+```{r Health questionnaires by concussion history}
+
+questionnaires_pct_t4<-rbind(
+  perc_fun2(questionnaires_df2$CP_Tot_Pre[questionnaires_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(questionnaires_df2$CP_Tot_Pre[questionnaires_df2$ConHis_Diag=="No"]),
+  perc_fun2(questionnaires_df2$CP_Cog_Avg_Pre[questionnaires_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(questionnaires_df2$CP_Cog_Avg_Pre[questionnaires_df2$ConHis_Diag=="No"]),
+  perc_fun2(questionnaires_df2$CP_Ocu_Avg_Pre[questionnaires_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(questionnaires_df2$CP_Ocu_Avg_Pre[questionnaires_df2$ConHis_Diag=="No"]),
+  perc_fun2(questionnaires_df2$CP_Anx_Avg_Pre[questionnaires_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(questionnaires_df2$CP_Anx_Avg_Pre[questionnaires_df2$ConHis_Diag=="No"]),
+  perc_fun2(questionnaires_df2$CP_Mig_Avg_Pre[questionnaires_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(questionnaires_df2$CP_Mig_Avg_Pre[questionnaires_df2$ConHis_Diag=="No"]),
+  perc_fun2(questionnaires_df2$CP_Vest_Avg_Pre[questionnaires_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(questionnaires_df2$CP_Vest_Avg_Pre[questionnaires_df2$ConHis_Diag=="No"]),
+  perc_fun2(questionnaires_df2$CP_Sleep_Avg_Pre[questionnaires_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(questionnaires_df2$CP_Sleep_Avg_Pre[questionnaires_df2$ConHis_Diag=="No"]),
+  perc_fun2(questionnaires_df2$CP_Neck_Avg_Pre[questionnaires_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(questionnaires_df2$CP_Neck_Avg_Pre[questionnaires_df2$ConHis_Diag=="No"]),
+  perc_fun2(questionnaires_df2$PHQ9_Tot_Pre[questionnaires_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(questionnaires_df2$PHQ9_Tot_Pre[questionnaires_df2$ConHis_Diag=="No"]),
+  perc_fun2(questionnaires_df2$GAD7_Tot_Pre[questionnaires_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(questionnaires_df2$GAD7_Tot_Pre[questionnaires_df2$ConHis_Diag=="No"]),
+  perc_fun2(questionnaires_df2$NBQ_Tot_Pre[questionnaires_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(questionnaires_df2$NBQ_Tot_Pre[questionnaires_df2$ConHis_Diag=="No"]),
+  perc_fun2(questionnaires_df2$MIDAS_Tot_Pre[questionnaires_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(questionnaires_df2$MIDAS_Tot_Pre[questionnaires_df2$ConHis_Diag=="No"]),
+  perc_fun2(questionnaires_df2$PSQI_Global_Pre[questionnaires_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(questionnaires_df2$PSQI_Global_Pre[questionnaires_df2$ConHis_Diag=="No"]),
+  perc_fun2(questionnaires_df2$PSQI_C1_Pre[questionnaires_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(questionnaires_df2$PSQI_C1_Pre[questionnaires_df2$ConHis_Diag=="No"]),
+  perc_fun2(questionnaires_df2$PSQI_C2_Pre[questionnaires_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(questionnaires_df2$PSQI_C2_Pre[questionnaires_df2$ConHis_Diag=="No"]),
+  perc_fun2(questionnaires_df2$PSQI_C3_Pre[questionnaires_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(questionnaires_df2$PSQI_C3_Pre[questionnaires_df2$ConHis_Diag=="No"]),
+  perc_fun2(questionnaires_df2$PSQI_C4_Pre[questionnaires_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(questionnaires_df2$PSQI_C4_Pre[questionnaires_df2$ConHis_Diag=="No"]),
+  perc_fun2(questionnaires_df2$PSQI_C5_Pre[questionnaires_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(questionnaires_df2$PSQI_C5_Pre[questionnaires_df2$ConHis_Diag=="No"]),
+  perc_fun2(questionnaires_df2$PSQI_C6_Pre[questionnaires_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(questionnaires_df2$PSQI_C6_Pre[questionnaires_df2$ConHis_Diag=="No"]),
+  perc_fun2(questionnaires_df2$PSQI_C7_Pre[questionnaires_df2$ConHis_Diag=="Yes"]),
+  perc_fun2(questionnaires_df2$PSQI_C7_Pre[questionnaires_df2$ConHis_Diag=="No"]))
+
+colnames(questionnaires_pct_t4)<-names_perc
+questionnaires_pct_t4<-as_tibble(questionnaires_pct_t4)
+ConHis2<-rep(c("Yes","No"),20)
+questionnaires_pct_t4<-questionnaires_pct_t4 %>% 
+  add_column(Outcome4,.before="Impaired (<1.9th %ile)") %>%
+  add_column(ConHis2,.after="Outcome4")
+questionnaires_pct_t4<-questionnaires_pct_t4 %>%
+  dplyr::rename(Outcome=Outcome4,
+         'Concussion History'=ConHis2)
+questionnaires_pct_t4<-questionnaires_pct_t4 %>%
+  mutate_if(is.numeric,~round(.,2))
+questionnaires_pct_t4<-questionnaires_pct_t4 %>%
+  mutate(across(-c(Outcome,'Concussion History'),~gsub("-","",.)))
+
+questionnaires_pct_ft4<-flextable(questionnaires_pct_t4)
+questionnaires_pct_ft4<-colformat_double(questionnaires_pct_ft4,digits=2)
+questionnaires_pct_ft4<-border_remove(questionnaires_pct_ft4)
+questionnaires_pct_ft4<-hline_top(questionnaires_pct_ft4,border=fp_border(width=0.5))
+questionnaires_pct_ft4<-flextable::align(questionnaires_pct_ft4,i=1:40,j=3:9,align="center")
+questionnaires_pct_ft4<-bold(questionnaires_pct_ft4,i=c(1,17,19,21,23,25),j=1)
+questionnaires_pct_ft4<-italic(questionnaires_pct_ft4,j=1)
+questionnaires_pct_ft4
+```
+
+
+## 7. Base rates
+
+## 7.1. Prevalence of Concussion Symptoms at Baseline
+```{r Prevalence of symptoms at baseline, message=FALSE}
+
+##Symptoms
+
+GSC_dat<-normative_dat %>% 
+  select(Username,SCAT5_GSC_Headache_Pre:SCAT5_GSC_Trouble_Fall_Sleep_Pre) %>%
+  pivot_longer(cols=SCAT5_GSC_Headache_Pre:SCAT5_GSC_Trouble_Fall_Sleep_Pre,
+               names_to="Symptoms",
+               values_to="Score")
+GSC_dat$Symptoms<-factor(GSC_dat$Symptoms,
+                            labels=c("Nervous or anxious",
+                                     "Balance problems",
+                                     "Blurred vision",
+                                     "Confusion",
+                                     "Difficulty concentrating",
+                                     "Difficulty remembering",
+                                     "Dizziness",
+                                     "Don't feel right",
+                                     "Drowsiness",
+                                     "More emotional",
+                                     "Fatigue or low energy",
+                                     "Feeling slowed down",
+                                     "Headache",
+                                     "Feeling like in a fog",
+                                     "Irritability",
+                                     "Nausea",
+                                     "Neck pain",
+                                     "Sensitivity to noise",
+                                     "Sensitivity to light",
+                                     "Pressure in head",
+                                     "Sadness",
+                                     "Trouble falling asleep"))
+GSC_dat$Score<-factor(GSC_dat$Score)
+GSC_dat$Score<-fct_rev(GSC_dat$Score)
+
+GSC_dat2<-GSC_dat %>% 
+  tabyl(Symptoms,Score) %>% 
+  adorn_percentages()
+
+GSC_dat3<-GSC_dat %>%
+  group_by(Symptoms,Score)
+
+##Barplot of symptom scores with count
+GSC_p1<-GSC_dat %>%
+  ggplot(aes(x=fct_rev(Symptoms),..count..,fill=Score)) + 
+  geom_bar() +
+  labs(x="Symptoms \n",y="Number of participants") +
+  coord_flip() +
+  theme_classic()
+GSC_p1 + scale_fill_brewer(type="seq",direction=-1,palette="BuGn")
+ggsave("GSC_p1.png")
+
+##Barplot of symptom scores with percentages
+GSC_p2<-GSC_dat %>%
+  ggplot(aes(x=fct_rev(Symptoms),(..count..)/sum(..count..),fill=Score)) + 
+  geom_bar() +
+  labs(x="Symptoms \n",y="\n Proportion of participants") +
+  scale_y_continuous(labels=scales::percent) +
+  coord_flip() 
+GSC_p2
+```
+
+## 7.2. Proportion of Participants with Positive Cutoff Scores
+
+Cutoff scores have been suggested for the VOMS, PHQ-9, GAD-7, PSQI and MIDAS.
+```{r Proportion with positive scores, warning=FALSE}
+
+normative_dat$SCAT5_Neuro_TG_Pass<-factor(normative_dat$SCAT5_Neuro_TG_Pass,levels=c("Pass","Fail"))
+cutoffs_df<-normative_dat %>%
+  select(c("SCAT5_Neuro_TG_Pass","VOMS_SP":"VOMS_Cutoff","PHQ9_Scores","PHQ9_cutoff","GAD7_Scores","GAD7_cutoff","MIDAS_Grade_Pre","PSQI_Sleep_Quality"))
+labels(cutoffs_df)<-c("SCAT5 Tandem Gait Test","VOMS Smooth Pursuits","VOMS Horizontal Saccades","VOMS Vertical Saccades","VOMS Convergence","VOMS Horizontal VOR","VOMS Vertical VOR", "VOMS VMS","VOMS NPC","VOMS Scores","PHQ-9 Scores","PHQ-9 Clinical Cutoff","GAD-7 Scores","GAD-7 Clinical Cutoff","MIDAS Grades","PSQI Clinical Cutoff")
+
+cutoffs_t1<-papeR::summarize(cutoffs_df,type="factor",variable.labels=TRUE)
+cutoffs_t1$Level<-str_replace(cutoffs_t1$Level,"<Missing>","Missing")
+colnames(cutoffs_t1)<-c("Outcome","Classification","remove","N","Perc")
+cutoffs_t1$Perc<-as.numeric(cutoffs_t1$Perc)
+cutoffs_t1$`N (%)`<-sprintf("%3.0f (%2.1f)",cutoffs_t1$N,cutoffs_t1$Perc)
+cutoffs_t1<-cutoffs_t1 %>%
+  select(-c("remove","N","Perc"))
+
+cutoffs_t1<-flextable(cutoffs_t1)
+cutoffs_t1<-border_remove(cutoffs_t1)
+cutoffs_t1<-hline_top(cutoffs_t1,border=fp_border(width=0.5))
+cutoffs_t1<-align_nottext_col(cutoffs_t1,align="center")
+cutoffs_t1<-autofit(cutoffs_t1,add_w=0.1)
+cutoffs_t1
+```
+
+### 7.2.1. VOMS Cutoff Score
+
+A change of 2 on any VOMS item indicates a positive score.
+```{r Proportion with +VOMS, message=FALSE}
+
+##Smooth pursuits
+VOMS_SP_prop<-normative_dat %>% tabyl(VOMS_SP) %>% adorn_pct_formatting()
+
+##Horizontal saccades
+VOMS_H_Sacc_prop<-normative_dat %>% tabyl(VOMS_H_Sacc) %>% adorn_pct_formatting()
+
+##Vertical saccades
+VOMS_V_Sacc_prop<-normative_dat %>% tabyl(VOMS_V_Sacc) %>% adorn_pct_formatting()
+
+##Convergence
+VOMS_Converg_prop<-normative_dat %>% tabyl(VOMS_Converg) %>% adorn_pct_formatting()
+
+##Horizontal VOR
+VOMS_H_VOR_prop<-normative_dat %>% tabyl(VOMS_H_VOR) %>% adorn_pct_formatting()
+
+##Vertical VOR
+VOMS_V_VOR_prop<-normative_dat %>% tabyl(VOMS_V_VOR) %>% adorn_pct_formatting()
+
+##Visual Motion Sensitivity
+VOMS_VMS_prop<-normative_dat %>% tabyl(VOMS_VMS) %>% adorn_pct_formatting()
+
+##NPC
+VOMS_NPC_prop<-normative_dat %>% tabyl(VOMS_NPC) %>% adorn_pct_formatting()
+
+##
+VOMS_df<-normative_dat %>%
+  select(County,Age_Group,ConHis_Diag,VOMS_SP:VOMS_Cutoff) %>%
+  pivot_longer(cols=VOMS_SP:VOMS_NPC)
+
+p1<-VOMS_df %>%
+  filter(!is.na(VOMS_Cutoff)) %>%
+  ggplot(aes(name,fill=value)) +
+  geom_bar() +
+  xlab("VOMS Item \n") +
+  ylab("\n Number of Participants") +
+  labs(fill="Test Score") +
+  theme_classic()
+p1 + scale_fill_brewer(palette="Purples") + coord_flip()
+ggsave("VOMS_p1.jpeg")
+
+##VOMS
+VOMS_cutoff_p1<-normative_dat %>%
+  filter(!is.na(VOMS_Cutoff)) %>%
+  ggplot(aes(VOMS_Cutoff,(..count..)/sum(..count..),fill=VOMS_Cutoff)) +
+  geom_bar(position="dodge") +
+  scale_y_continuous(n.breaks=5, labels=scales::percent) +
+  labs(x="\n VOMS Score",y="Proportion of participants \n") +
+  facet_grid(~Age_Group) +
+  theme_classic() 
+VOMS_cutoff_p1 
+
+normative_dat %>% 
+  tabyl(Age_Group,VOMS_Cutoff) %>%
+  adorn_percentages() %>%
+  adorn_pct_formatting(digits=1) %>%
+  adorn_ns()
+57*100/(57+40)
+40*100/(57+40)
+
+VOMS_cutoff_p2<-normative_dat %>%
+  filter(!is.na(VOMS_Cutoff)) %>%
+  ggplot() + 
+  geom_mosaic(aes(x=product(VOMS_Cutoff), fill=VOMS_Cutoff, conds=product(Age_Group))) +
+  theme_mosaic() +
+  labs(x="Age Group",y="VOMS Score") +
+  annotate("text",x=0.25,y=0.25,label="51.4%") +
+  annotate("text",x=0.25,y=0.75,label="48.6%") +
+  annotate("text",x=0.75,y=0.25,label="58.8%") +
+  annotate("text",x=0.75,y=0.75,label="41.2%")
+VOMS_cutoff_p2 + scale_fill_jco()
+ggsave("VOMS_Cutoff.png")
+```
+### 7.2.2. PHQ-9
+
+PHQ-9 scores are classified as none, mild, moderate, moderately severe or severe.
+
+A score of 10 has a sensitivity of 85% and a specificity of 89% for a MDD.
+```{r Proportion with +PHQ9, message=FALSE}
+
+PHQ9_class<-data.frame(Score=c("0-4","5-9","10-14","15-19","20-27"),
+                       Classification=c("None","Mild","Moderate","Moderately Severe","Severe"))
+kable(PHQ9_class)
+
+PHQ9_cutoff_p1<-normative_dat %>%
+  filter(!is.na(PHQ9_Scores)) %>%
+  ggplot(aes(Age_Group,fill=PHQ9_Scores)) +
+  geom_bar() +
+  theme_classic() 
+PHQ9_cutoff_p1
+
+PHQ9_cutoff_p2<-normative_dat %>%
+  filter(!is.na(PHQ9_Scores)) %>%
+  ggplot() +
+  geom_mosaic(aes(x=product(PHQ9_Scores), fill=PHQ9_Scores, conds=product(Age_Group))) +
+  theme_classic()
+PHQ9_cutoff_p2
+```
+### 7.2.3. GAD-7
+
+GAD-7 measures are classified as none, mild, moderate and severe.
+
+A score of 8 has a 92% sensitivity and 76% specificity for GAD, and a 77% sensitivity and 82% specificity for any anxiety disorder.
+```{r Proportion with +GAD7, message=FALSE}
+
+GAD7_class<-data.frame(Score=c("0-4","5-9","10-14","15-21"),
+                       Classification=c("None","Mild","Moderate","Severe"))
+kable(GAD7_class)
+```
+### 7.2.4. PSQI
+
+A cutoff score of 5 is used to classify scores as poor quality (<5) or good quality (5+).
+```{r}
+
+```
+### 7.2.5. MIDAS
+
+Scores are classified as grade I/little or no disability, grade II/mild disability, grade III/moderate disability, or grade IV/severe disability.
+```{r}
+
+```
+## 8. Between Group Differences in Baseline Outcomes
+
+Examine differences in clinical test and health questionnaire outcomes based on (i) level of play, (ii) age group, and (iii) history of diagnosed concussion.
+
+### 8.1. Hypotheses
+
+(i) Elite players will differ on clinical test and health questionnaire outcomes compared with non-elite players
+(ii) Adult players will differ on clinical test and health questionnaire outcomes compared with adolescent players
+(iii) Players with a previous diagnosed concussion will differ on clinical test and health questionnaire outcomes compared with players without a previous diagnosed concussion
+
+To control FWER, Holm-Bonferroni corrections are applied to each set of analyses (level of play, age group, and history of diagnosed concussion).
+
+### 8.2. Examine Between-Group Differences in Outcomes
+
+#### 8.2.1. Level of Play
+
+##### 8.2.1.1. Explore Outcomes
+
+###### 8.2.1.1.1. Clinical Tests
+```{r Explore CTs by level, warning=FALSE}
+
+####ImPACT####
+##Verbal Memory
+TwoGroups(normative_dat$ImPACT_Verbal_Mem_Score_Pre,normative_dat$County)
+
+normative_dat %>% group_by(County) %>% shapiro_test(ImPACT_Verbal_Mem_Score_Pre)
+ggqqplot(normative_dat,x="ImPACT_Verbal_Mem_Score_Pre",facet.by="County")
+normative_dat %>% levene_test(ImPACT_Verbal_Mem_Score_Pre ~ County)
+
+##Visual Memory
+TwoGroups(normative_dat$ImPACT_Visual_Mem_Score_Pre,normative_dat$County, main="ImPACT Visual Memory Score")
+
+normative_dat %>% group_by(County) %>% shapiro_test(ImPACT_Visual_Mem_Score_Pre)
+ggqqplot(normative_dat,x="ImPACT_Visual_Mem_Score_Pre",facet.by="County")
+normative_dat %>% levene_test(ImPACT_Visual_Mem_Score_Pre ~ County)
+
+##Visual Motor Score
+TwoGroups(normative_dat$ImPACT_Visual_Motor_Score_Pre,normative_dat$County, main="ImPACT Visual Motor Score")
+
+normative_dat %>% group_by(County) %>% shapiro_test(ImPACT_Visual_Motor_Score_Pre)
+ggqqplot(normative_dat,x="ImPACT_Visual_Motor_Score_Pre",facet.by="County")
+normative_dat %>% levene_test(ImPACT_Visual_Motor_Score_Pre ~ County)
+
+##Reaction Time
+TwoGroups(normative_dat$ImPACT_Reaction_Time_Score_Pre,normative_dat$County, main="ImPACT Reaction Time")
+
+normative_dat %>% group_by(County) %>% shapiro_test(ImPACT_Reaction_Time_Score_Pre)
+ggqqplot(normative_dat,x="ImPACT_Reaction_Time_Score_Pre",facet.by="County")
+normative_dat %>% levene_test(ImPACT_Reaction_Time_Score_Pre ~ County)
+
+##PCSS
+TwoGroups(normative_dat$PCSS_TSS_Pre,normative_dat$County,main="PCSS")
+
+normative_dat %>% group_by(County) %>% shapiro_test(PCSS_TSS_Pre)
+ggqqplot(normative_dat,x="PCSS_TSS_Pre",facet.by="County")
+normative_dat %>% levene_test(PCSS_TSS_Pre ~ County)
+
+####SCAT5####
+##GSC TSS
+TwoGroups(normative_dat$SCAT5_GSC_TSS_Pre,normative_dat$County,main="GSC TSS")
+
+normative_dat %>% group_by(County) %>% shapiro_test(SCAT5_GSC_TSS_Pre)
+ggqqplot(normative_dat,x="SCAT5_GSC_TSS_Pre",facet.by="County")
+normative_dat %>% levene_test(SCAT5_GSC_TSS_Pre ~ County)
+
+##GSC SSS
+TwoGroups(normative_dat$SCAT5_GSC_SSS_Pre,normative_dat$County,main="GSC SSS")
+
+normative_dat %>% group_by(County) %>% shapiro_test(SCAT5_GSC_SSS_Pre)
+ggqqplot(normative_dat,x="SCAT5_GSC_SSS_Pre",facet.by="County")
+normative_dat %>% levene_test(SCAT5_GSC_SSS_Pre ~ County)
+
+##SAC Orientation
+xt_level<-function(x){chisq.test(xtabs(~ x + County, data=normative_dat))$expected}
+
+xt_level(normative_dat$SCAT5_SAC_Orient_Pre)
+#Expected values <5 in >80% of cells
+#Use Fisher exact test
+
+##SAC Immediate Memory
+TwoGroups(normative_dat$SCAT5_SAC_Mem_Pre,normative_dat$County,main="SAC Immediate Memory")
+
+normative_dat %>% group_by(County) %>% shapiro_test(SCAT5_SAC_Mem_Pre)
+ggqqplot(normative_dat,x="SCAT5_SAC_Mem_Pre",facet.by="County")
+normative_dat %>% levene_test(SCAT5_SAC_Mem_Pre ~ County)
+
+##SAC Digits
+xt_level(normative_dat$SCAT5_SAC_Dig_Pre)
+#Expected values <5 in >80% of cells
+#Use Fisher exact test
+
+##SAC Months
+xt_level(normative_dat$SCAT5_SAC_Months_Pre)
+#Use Fisher exact test
+
+##SAC Concentration
+xt_level(normative_dat$SCAT5_SAC_Con_Pre)
+#Use Fisher exact test
+
+##SAC Delayed Memory
+TwoGroups(normative_dat$SCAT5_SAC_Mem_Delay_Pre,normative_dat$County,main="SAC Delayed Memory")
+
+normative_dat %>% group_by(County) %>% shapiro_test(SCAT5_SAC_Mem_Delay_Pre)
+ggqqplot(normative_dat,x="SCAT5_SAC_Mem_Delay_Pre",facet.by="County")
+normative_dat %>% levene_test(SCAT5_SAC_Mem_Delay_Pre ~ County)
+
+##FTN
+TwoGroups(normative_dat$SCAT5_Neuro_FTN_Time_Pre,normative_dat$County,main="FTN Time")
+
+normative_dat %>% group_by(County) %>% shapiro_test(SCAT5_Neuro_FTN_Time_Pre)
+ggqqplot(normative_dat,x="SCAT5_Neuro_FTN_Time_Pre",facet.by="County")
+normative_dat %>% levene_test(SCAT5_Neuro_FTN_Time_Pre ~ County)
+
+##Tandem Gait
+TwoGroups(normative_dat$SCAT5_Neuro_Time_TG_Pre,normative_dat$County,main="TG Time")
+
+normative_dat %>% group_by(County) %>% shapiro_test(SCAT5_Neuro_Time_TG_Pre)
+ggqqplot(normative_dat,x="SCAT5_Neuro_Time_TG_Pre",facet.by="County")
+normative_dat %>% levene_test(SCAT5_Neuro_Time_TG_Pre ~ County)
+
+##mBESS Total
+TwoGroups(normative_dat$SCAT5_BESS_Tot_Pre,normative_dat$County,main="mBESS Total Score")
+
+normative_dat %>% group_by(County) %>% shapiro_test(SCAT5_BESS_Tot_Pre)
+ggqqplot(normative_dat,x="SCAT5_BESS_Tot_Pre",facet.by="County")
+normative_dat %>% levene_test(SCAT5_BESS_Tot_Pre ~ County)
+
+##mBESS Double-Leg
+xt_level(normative_dat$SCAT5_BESS_DL_Pre)
+#Use Fisher exact test
+
+##mBESS Single-Leg
+TwoGroups(normative_dat$SCAT5_BESS_SL_Pre,normative_dat$County,main="mBESS Single-Leg Score")
+
+normative_dat %>% group_by(County) %>% shapiro_test(SCAT5_BESS_SL_Pre)
+ggqqplot(normative_dat,x="SCAT5_BESS_SL_Pre",facet.by="County")
+normative_dat %>% levene_test(SCAT5_BESS_SL_Pre ~ County)
+
+##mBESS Tandem
+TwoGroups(normative_dat$SCAT5_BESS_Tandem_Stance_Pre,normative_dat$County,main="mBESS Tandem Score")
+
+normative_dat %>% group_by(County) %>% shapiro_test(SCAT5_BESS_Tandem_Stance_Pre)
+ggqqplot(normative_dat,x="SCAT5_BESS_Tandem_Stance_Pre",facet.by="County")
+normative_dat %>% levene_test(SCAT5_BESS_Tandem_Stance_Pre ~ County)
+
+####VOMS####
+##Smooth Pursuits
+xt_level(normative_dat$VOMS_SP)
+#Use Fisher test
+
+##Horizontal Saccades
+xt_level(normative_dat$VOMS_H_Sacc)
+#Use Fisher test
+
+##Vertical Saccades
+xt_level(normative_dat$VOMS_V_Sacc)
+#Use Chi-square
+
+##Convergence
+xt_level(normative_dat$VOMS_Converg)
+#Use Fisher test
+
+##Horizontal Vestibulo-Ocular Reflex
+xt_level(normative_dat$VOMS_H_VOR)
+#Use Chi-square
+
+##Vertical Vestibulo-Ocular Reflex
+xt_level(normative_dat$VOMS_V_VOR)
+#Use Fisher test
+
+##Visual Motion Sensitivity
+xt_level(normative_dat$VOMS_VMS)
+#Use Fisher test
+
+##Near Point of Convergence
+xt_level(normative_dat$VOMS_NPC)
+#Use Fisher test
+
+##Total VOMS
+xt_level(normative_dat$VOMS_Cutoff)
+##Use Chi-square
+
+####Neck Dynamometry####
+##Neck Flexion
+TwoGroups(normative_dat$Neck_Flex_Avg_Pre,normative_dat$County,main="Neck Flexion")
+
+normative_dat %>% group_by(County) %>% shapiro_test(Neck_Flex_Avg_Pre)
+ggqqplot(normative_dat,x="Neck_Flex_Avg_Pre",facet.by="County")
+normative_dat %>% levene_test(Neck_Flex_Avg_Pre ~ County)
+
+##Neck Extension
+TwoGroups(normative_dat$Neck_Ext_Avg_Pre,normative_dat$County,main="Neck Extension")
+
+normative_dat %>% group_by(County) %>% shapiro_test(Neck_Ext_Avg_Pre)
+ggqqplot(normative_dat,x="Neck_Ext_Avg_Pre",facet.by="County")
+normative_dat %>% levene_test(Neck_Ext_Avg_Pre ~ County)
+
+##Neck Lateral Flexion, dominant side
+TwoGroups(normative_dat$Neck_LatFlex_D_Avg_Pre,normative_dat$County,main="Neck Lateral Flexion, dominant side")
+
+normative_dat %>% group_by(County) %>% shapiro_test(Neck_LatFlex_D_Avg_Pre)
+ggqqplot(normative_dat,x="Neck_LatFlex_D_Avg_Pre",facet.by="County")
+normative_dat %>% levene_test(Neck_LatFlex_D_Avg_Pre ~ County)
+
+##Neck Lateral Flexion, non-dominant side
+TwoGroups(normative_dat$Neck_LatFlex_ND_Avg_Pre,normative_dat$County,main="Neck Lateral Flexion, non-dominant side")
+
+normative_dat %>% group_by(County) %>% shapiro_test(Neck_LatFlex_ND_Avg_Pre)
+ggqqplot(normative_dat,x="Neck_LatFlex_ND_Avg_Pre",facet.by="County")
+normative_dat %>% levene_test(Neck_LatFlex_ND_Avg_Pre ~ County)
+
+##Neck Rotation, dominant side
+TwoGroups(normative_dat$Neck_SCM_D_Avg_Pre,normative_dat$County,main="Neck Rotation, dominant side")
+
+normative_dat %>% group_by(County) %>% shapiro_test(Neck_SCM_D_Avg_Pre)
+ggqqplot(normative_dat,x="Neck_SCM_D_Avg_Pre",facet.by="County")
+normative_dat %>% levene_test(Neck_SCM_D_Avg_Pre ~ County)
+
+##Neck Rotation, non-dominant side
+TwoGroups(normative_dat$Neck_SCM_ND_Avg_Pre,normative_dat$County,main="Neck Rotation, non-dominant side")
+
+normative_dat %>% group_by(County) %>% shapiro_test(Neck_SCM_ND_Avg_Pre)
+ggqqplot(normative_dat,x="Neck_SCM_ND_Avg_Pre",facet.by="County")
+normative_dat %>% levene_test(Neck_SCM_ND_Avg_Pre ~ County)
+
+CTs_level_df<-data.frame(Outcome=c("Verbal Memory Score","Visual Memory Score","Visual Motor Score","Reaction Time","Post-Concussion Symptom Score",
+                               "Total Symptom Score","Symptom Severity Score","Orientation","Immediate Memory","Digits Backwards","Months Backwards","Concentration","Delayed Memory",
+                               "Finger-to-nose Time","Tandem Gait Time","mBESS Total Score","mBESS Double-Leg Score","mBESS Single-Leg Score","mBESS Tandem Stance Score",
+                               "Smooth Pursuits","Horizontal Saccades Score","Vertical Saccades Score","Convergence Score","Horizontal VOR Score","Vertical VOR Score","Visual Motion Sensitivity Score","Near Point of Convergence","VOMS Cutoff",
+                               "Neck Flexion","Neck Extension","Dominant Side Lateral Neck Flexion","Non-Dominant Side Lateral Neck Flexion","Dominant Side Neck Rotation","Non-Dominant Side Neck Rotation"),
+                               
+                     Test=c("Wilcoxon","Wilcoxon","Independent t-test","Wilcoxon","Wilcoxon",
+                            "Wilcoxon","Wilcoxon", "Fisher exact","Wilcoxon","Chi-square","Fisher exact","Fisher exact","Wilcoxon","Independent t-test","Wilcoxon","Wilcoxon","Fisher exact","Wilcoxon","Wilcoxon",
+                            "Fisher exact","Fisher exact","Chi-square","Fisher exact","Chi-square","Fisher exact","Fisher exact","Fisher exact","Chi-square",
+            "Independent t-test","Independent t-test","Independent t-test","Independent t-test","Wilcoxon","Independent t-test"))
+kable(CTs_level_df)
+```
+###### 8.2.1.1.2. Health Questionnaires
+```{r Explore HQ outcomes by level, warning=FALSE}
+
+####CP Screen####
+##CP Total
+TwoGroups(normative_dat$CP_Tot_Pre,normative_dat$County,main="CP Total")
+
+normative_dat %>% group_by(County) %>% shapiro_test(CP_Tot_Pre)
+ggqqplot(normative_dat,x="CP_Tot_Pre",facet.by="County")
+normative_dat %>% levene_test(CP_Tot_Pre ~ County)
+
+##Cognitive
+TwoGroups(normative_dat$CP_Cog_Avg_Pre,normative_dat$County,main="CP Migraine")
+
+##Migraine
+TwoGroups(normative_dat$CP_Mig_Avg_Pre,normative_dat$County,main="CP Migraine")
+
+normative_dat %>% group_by(County) %>% shapiro_test(CP_Mig_Pre)
+ggqqplot(normative_dat,x="CP_Mig_Pre",facet.by="County")
+normative_dat %>% levene_test(CP_Mig_Pre ~ County)
+
+##Mood
+TwoGroups(normative_dat$CP_Anx_Avg_Pre,normative_dat$County,main="CP Anxiety/Mood")
+
+normative_dat %>% group_by(County) %>% shapiro_test(CP_Anx_Pre)
+ggqqplot(normative_dat,x="CP_Anx_Pre",facet.by="County")
+normative_dat %>% levene_test(CP_Anx_Pre ~ County)
+
+##Vestibular
+TwoGroups(normative_dat$CP_Vest_Avg_Pre,normative_dat$County,main="CP Vestibular")
+
+normative_dat %>% group_by(County) %>% shapiro_test(CP_Vest_Pre)
+ggqqplot(normative_dat,x="CP_Vest_Pre",facet.by="County")
+normative_dat %>% levene_test(CP_Vest_Pre ~ County)
+
+##Ocular
+TwoGroups(normative_dat$CP_Ocu_Avg_Pre,normative_dat$County,main="CP Ocular")
+
+normative_dat %>% group_by(County) %>% shapiro_test(CP_Ocu_Pre)
+ggqqplot(normative_dat,x="CP_Ocu_Pre",facet.by="County")
+normative_dat %>% levene_test(CP_Ocu_Pre ~ County)
+
+##Neck
+TwoGroups(normative_dat$CP_Neck_Avg_Pre,normative_dat$County,main="CP Neck")
+
+normative_dat %>% group_by(County) %>% shapiro_test(CP_Neck_Pre)
+ggqqplot(normative_dat,x="CP_Neck_Pre",facet.by="County")
+normative_dat %>% levene_test(CP_Neck_Pre ~ County)
+
+##Sleep
+TwoGroups(normative_dat$CP_Sleep_Avg_Pre,normative_dat$County,main="CP Sleep")
+
+normative_dat %>% group_by(County) %>% shapiro_test(CP_Sleep_Pre)
+ggqqplot(normative_dat,x="CP_Sleep_Pre",facet.by="County")
+normative_dat %>% levene_test(CP_Sleep_Pre ~ County)
+
+####PHQ-9 & GAD7####
+##PHQ9 Total
+TwoGroups(normative_dat$PHQ9_Tot_Pre,normative_dat$County,main="PHQ-9")
+
+normative_dat %>% group_by(County) %>% shapiro_test(PHQ9_Tot_Pre)
+ggqqplot(normative_dat,x="PHQ9_Tot_Pre",facet.by="County")
+normative_dat %>% levene_test(PHQ9_Tot_Pre ~ County)
+
+##PHQ9 Grade
+xt_level(normative_dat$PHQ9_Scores)
+#Use Fisher exact
+
+##PHQ9 Cutoff
+xt_level(normative_dat$PHQ9_cutoff)
+#Use Fisher exact
+
+##GAD7 Total
+TwoGroups(normative_dat$GAD7_Tot_Pre,normative_dat$County,main="GAD-7")
+
+normative_dat %>% group_by(County) %>% shapiro_test(GAD7_Tot_Pre)
+ggqqplot(normative_dat,x="GAD7_Tot_Pre",facet.by="County")
+normative_dat %>% levene_test(GAD7_Tot_Pre ~ County)
+
+##GAD7 Grades
+xt_level(normative_dat$GAD7_Scores)
+#Use Fisher exact
+
+##GAD7 Cutoff
+xt_level(normative_dat$GAD7_cutoff)
+#Use Fisher exact
+
+####NBQ & MIDAS####
+TwoGroups(normative_dat$NBQ_Tot_Pre,normative_dat$County,main="NBQ")
+
+normative_dat %>% group_by(County) %>% shapiro_test(NBQ_Tot_Pre)
+ggqqplot(normative_dat,x="NBQ_Tot_Pre",facet.by="County")
+normative_dat %>% levene_test(NBQ_Tot_Pre ~ County)
+
+##MIDAS Total
+TwoGroups(normative_dat$MIDAS_Tot_Pre,normative_dat$County,main="MIDAS")
+
+normative_dat %>% group_by(County) %>% shapiro_test(MIDAS_Tot_Pre)
+ggqqplot(normative_dat,x="MIDAS_Tot_Pre",facet.by="County")
+normative_dat %>% levene_test(MIDAS_Tot_Pre ~ County)
+
+##MIDAS Grades
+xt_level(normative_dat$MIDAS_Grade_Pre)
+#Use Fisher exact
+
+####PSQI####
+##Global Score
+TwoGroups(normative_dat$PSQI_Global_Pre,normative_dat$County,main="PSQI Total")
+
+normative_dat %>% group_by(County) %>% shapiro_test(PSQI_Global_Pre)
+ggqqplot(normative_dat,x="PSQI_Global_Pre",facet.by="County")
+normative_dat %>% levene_test(PSQI_Global_Pre ~ County)
+
+##C1
+xt_level(normative_dat$PSQI_C1_Pre)
+#Use Fisher exact
+
+##C2
+xt_level(normative_dat$PSQI_C2_Pre)
+
+##C3
+xt_level(normative_dat$PSQI_C3_Pre)
+#Use Fisher exact
+
+##C4
+xt_level(normative_dat$PSQI_C4_Pre)
+#Use Fisher exact
+
+##C5
+xt_level(normative_dat$PSQI_C5_Pre)
+#Use Fisher
+
+##C6
+xt_level(normative_dat$PSQI_C6_Pre)
+#Use Fisher exact
+
+##C7
+xt_level(normative_dat$PSQI_C7_Pre)
+#Use Fisher exact
+
+healthQ_level_df<-data.frame(Outcome=c("CP Total Score","CP Cognitive/Fatigue Score","CP Migraine Score","CP Vestibular Score","CP Ocular Score","CP Anxiety/Mood Score","CP Sleep Score","CP Neck Score",
+                               "PHQ-9 Score","PHQ-9 Grades","PHQ-9 Cutoff",
+                               "GAD-7 Score","GAD-7 Grades","GAD-7 Cutoff",
+                               "Neck Bournemouth Score","MIDAS Score","MIDAS Grade",
+                               "PSQI Global Score","PSQI C1 Score","PSQI C2 Score","PSQI C3 Score","PSQI C4 Score","PSQI C5 Score","PSQI C6 Score","PSQI C7 Score","PSQI Cutoff"),
+                             Test=c("Wilcoxon","Wilcoxon","Wilcoxon","Wilcoxon","Wilcoxon","Wilcoxon","Wilcoxon","Wilcoxon",
+##PHQ-9
+        "Wilcoxon","Fisher exact","Fisher exact",
+#GAD-7  
+        "Wilcoxon","Fisher exact","Fisher exact",
+#NBQ & MIDAS
+        "Wilcoxon","Wilcoxon","Fisher exact",
+#PSQI
+            "Wilcoxon","Fisher exact","Chi-square","Fisher exact","Fisher exact","Fisher exact","Fisher exact","Fisher exact","Fisher exact"))
+kable(healthQ_level_df)
+```
+##### 8.2.1.2. Analysis (Continuous Variables)
+
+###### 8.2.1.2.1. Clinical Tests
+```{r CTs by level (continuous), warning=FALSE}
+
+##Wilcox rank sum tests
+CT_levels_Wilcox_df<-normative_dat %>%
+  select(ImPACT_Verbal_Mem_Score_Pre,ImPACT_Visual_Mem_Score_Pre,ImPACT_Reaction_Time_Score_Pre,PCSS_TSS_Pre,SCAT5_GSC_TSS_Pre,SCAT5_GSC_SSS_Pre,SCAT5_SAC_Mem_Pre,SCAT5_SAC_Mem_Delay_Pre,SCAT5_Neuro_Time_TG_Pre,SCAT5_BESS_Tot_Pre,SCAT5_BESS_SL_Pre,SCAT5_BESS_Tandem_Stance_Pre,Neck_SCM_D_Avg_Pre) 
+
+CT_levels_Wilcox<-CT_levels_Wilcox_df %>%
+  map_df(~tidy(wilcox.test(.~County,data=normative_dat)),.id="Outcome")
+CT_levels_Wilcox
+
+wilcox_es_level<-function(x){rank_biserial(x ~ County, data=normative_dat, alternative="two.sided")}
+
+CT_wilcox_level_es<-CT_levels_Wilcox_df %>%
+  map(.,wilcox_es_level)
+CT_wilcox_level_es<-ldply(CT_wilcox_level_es,data.frame)
+CT_wilcox_level_es$CI<-sprintf("%2.2f-%2.2f",CT_wilcox_level_es$CI_low,CT_wilcox_level_es$CI_high)
+CT_wilcox_level_es$es<-sprintf("%2.2f (%s)",CT_wilcox_level_es$r_rank_biserial,CT_wilcox_level_es$CI)
+CT_wilcox_level_es<-CT_wilcox_level_es %>% select(c(.id,es))
+CT_wilcox_level_es
+
+##T-tests
+CT_levels_Ttest_df<-normative_dat %>%
+  select(ImPACT_Visual_Motor_Score_Pre,SCAT5_Neuro_FTN_Time_Pre,Neck_Flex_Avg_Pre,Neck_Ext_Avg_Pre,Neck_LatFlex_D_Avg_Pre,Neck_LatFlex_ND_Avg_Pre,Neck_SCM_ND_Avg_Pre) 
+
+CT_levels_Ttest<-CT_levels_Ttest_df %>%
+  map_df(~tidy(t.test(.~County,data=normative_dat)),.id="Outcome")
+CT_levels_Ttest
+
+ttest_es_level<-function(x){glass_delta(x ~ County, data=normative_dat, alternative="two.sided")}
+
+CT_ttest_level_es<-CT_levels_Ttest_df %>%
+  map(.,ttest_es_level)
+CT_ttest_level_es<-ldply(CT_ttest_level_es,data.frame)
+CT_ttest_level_es$CI<-sprintf("%2.2f-%2.2f",CT_ttest_level_es$CI_low,CT_ttest_level_es$CI_high)
+CT_ttest_level_es$es<-sprintf("%2.2f (%s)",CT_ttest_level_es$Glass_delta,CT_ttest_level_es$CI)
+CT_ttest_level_es<-CT_ttest_level_es %>% select(c(.id,es))
+CT_ttest_level_es
+```
+###### 8.2.1.2.2. Health Questionnaires
+```{r HQs by level (continuous), warning=FALSE}
+
+HQ_levels_Wilcox_df<-normative_dat %>%
+  select(CP_Tot_Pre:PHQ9_Tot_Pre,GAD7_Tot_Pre,NBQ_Tot_Pre,MIDAS_Tot_Pre,PSQI_Global_Pre) 
+
+HQ_levels_Wilcox<-HQ_levels_Wilcox_df %>%
+  map_df(~tidy(wilcox.test(.~County,data=normative_dat)),.id="Outcome")
+HQ_levels_Wilcox
+
+HQ_wilcox_level_es<-HQ_levels_Wilcox_df %>%
+  map(.,wilcox_es_level)
+HQ_wilcox_level_es<-ldply(HQ_wilcox_level_es,data.frame)
+HQ_wilcox_level_es$CI<-sprintf("%2.2f-%2.2f",HQ_wilcox_level_es$CI_low,HQ_wilcox_level_es$CI_high)
+HQ_wilcox_level_es$es<-sprintf("%2.2f (%s)",HQ_wilcox_level_es$r_rank_biserial,HQ_wilcox_level_es$CI)
+HQ_wilcox_level_es<-HQ_wilcox_level_es %>% select(c(.id,es))
+HQ_wilcox_level_es
+```
+##### 8.2.1.3. Analysis (Categorical Variables)
+
+###### 8.2.1.3.1. Clinical Tests
+```{r CTs by level (categorical), warning=FALSE}
+
+##Create long format dataframe of categorical clinical test outcomes
+CTs_level_cat_df<-normative_dat %>%
+  select(County,SCAT5_SAC_Orient_Pre,SCAT5_SAC_Dig_Pre,SCAT5_SAC_Months_Pre,SCAT5_SAC_Con_Pre,SCAT5_BESS_DL_Pre,VOMS_SP:VOMS_NPC,VOMS_Cutoff) %>%
+  gather(key="Test",value="value",SCAT5_SAC_Orient_Pre:VOMS_Cutoff)
+
+##Create dataframe for Chi-square analysis
+CTs_level_df_chisq<-CTs_level_cat_df %>% 
+  filter(Test=="SCAT5_SAC_Dig_Pre"|Test=="VOMS_V_Sacc"|Test=="VOMS_H_VOR"|Test=="VOMS_Cutoff")
+##Create dataframe for Fisher exact analysis
+CTs_level_df_fisher<-CTs_level_cat_df %>%
+  filter(Test!="SCAT5_SAC_Dig_Pre"&Test!="VOMS_V_Sacc"&Test!="VOMS_H_VOR"&Test!="VOMS_Cutoff")
+  
+##Chi-square tests
+CTs_level_chisq<-CTs_level_df_chisq %>%
+  group_by(Test) %>%
+  nest(data=c(County,value)) %>%
+  mutate(chisq=map(data,~tidy(chisq.test(.$County,.$value)))) %>%
+  mutate(cramer=map(data,~cramers_v(.$County,.$value,alternative="two.sided"))) %>%
+  select(-data) %>%
+  unnest(cols=c(chisq,cramer))
+CTs_level_chisq
+
+##Fisher exact tests
+CTs_level_fisher<-CTs_level_df_fisher %>%
+  group_by(Test) %>%
+  nest(data=c(County,value)) %>%
+  mutate(fisher=map(data,~tidy(fisher.test(.$County,.$value)))) %>%
+  mutate(cramer=map(data,~cramers_v(.$County,.$value,alternative="two.sided"))) %>%
+  select(-data) %>%
+  unnest(cols=c(fisher))
+CTs_level_fisher
+```
+###### 8.2.1.3.2. Health Questionnaires
+```{r HQs by level (categorical), warning=FALSE}
+
+##Create long format dataframe of categorical health questionnaire outcomes
+HQ_level_cat_df<-normative_dat %>%
+  select(County,PHQ9_Scores,PHQ9_cutoff,GAD7_Scores,GAD7_cutoff,MIDAS_Grade_Pre,PSQI_C1_Pre:PSQI_C7_Pre,PSQI_Sleep_Quality) %>%
+  gather(key="Test",value="value",PHQ9_Scores:PSQI_Sleep_Quality)
+
+##Create dataframe for Chi-square analysis
+HQ_level_df_chisq<-HQ_level_cat_df %>% 
+  filter(Test=="PSQI_C2_Pre")
+##Create dataframe for Fisher exact analysis
+HQ_level_df_fisher<-HQ_level_cat_df %>%
+  filter(Test!="PSQI_C2_Pre")
+  
+####Chi-square tests####
+HQ_level_chisq<-HQ_level_df_chisq %>%
+  group_by(Test) %>%
+  nest(data=c(County,value)) %>%
+  mutate(chisq=map(data,~tidy(chisq.test(.$County,.$value)))) %>%
+  mutate(cramer=map(data,~cramers_v(.$County,.$value,alternative="two.sided"))) %>%
+  select(-data) %>%
+  unnest(cols=c(chisq))
+HQ_level_chisq
+
+####Fisher exact tests####
+HQ_level_fisher<-HQ_level_df_fisher %>%
+  group_by(Test) %>%
+  nest(data=c(County,value)) %>%
+  mutate(fisher=map(data,~tidy(fisher.test(.$County,.$value)))) %>%
+  mutate(cramer=map(data,~cramers_v(.$County,.$value,alternative="two.sided"))) %>%
+  select(-data) %>%
+  unnest(cols=c(fisher))
+HQ_level_fisher
+```
+
+##### 8.2.1.4. Correction for Multiple Comparisons
+
+```{r Multiple correction for levels}
+
+level_pvalues<-c(CT_levels_Wilcox$p.value,CT_levels_Ttest$p.value,HQ_levels_Wilcox$p.value,CTs_level_chisq$p.value,CTs_level_fisher$p.value,HQ_level_chisq$p.value,HQ_level_fisher$p.value)
+
+level_pvalues_adj<-p.adjust(level_pvalues,method="holm")
+
+level_pvalues_df<-data.frame(Outcome=c(
+  CT_levels_Wilcox$Outcome,
+  CT_levels_Ttest$Outcome,
+  HQ_levels_Wilcox$Outcome,
+  CTs_level_chisq$Test,
+  CTs_level_fisher$Test,
+  HQ_level_chisq$Test,
+  HQ_level_fisher$Test),
+                             Original=level_pvalues,
+                             Adjusted=level_pvalues_adj)
+kable(level_pvalues_df,digits=3)
+
+level_pvalues_ft<-flextable(level_pvalues_df)
+level_pvalues_ft<-add_header_lines(level_pvalues_ft,values="Level")
+level_pvalues_ft<-colformat_double(level_pvalues_ft,digits=3)
+
+```
+#### 8.2.2. Age
+
+##### 8.2.2.1. Explore Outcomes
+
+###### 8.2.2.1.1. Clinical Tests
+```{r Explore CTs by age, warning=FALSE}
+
+####ImPACT####
+##Verbal Memory
+TwoGroups(normative_dat$ImPACT_Verbal_Mem_Score_Pre,normative_dat$Age_Group)
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(ImPACT_Verbal_Mem_Score_Pre)
+ggqqplot(normative_dat,x="ImPACT_Verbal_Mem_Score_Pre",facet.by="Age_Group")
+
+##Visual Memory
+TwoGroups(normative_dat$ImPACT_Visual_Mem_Score_Pre,normative_dat$Age_Group)
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(ImPACT_Visual_Mem_Score_Pre)
+ggqqplot(normative_dat,x="ImPACT_Visual_Mem_Score_Pre",facet.by="Age_Group")
+
+##Visual Motor Speed
+TwoGroups(normative_dat$ImPACT_Visual_Motor_Score_Pre,normative_dat$Age_Group)
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(ImPACT_Visual_Motor_Score_Pre)
+ggqqplot(normative_dat,x="ImPACT_Visual_Motor_Score_Pre",facet.by="Age_Group")
+normative_dat %>% levene_test(ImPACT_Visual_Motor_Score_Pre~Age_Group)
+
+##Reaction Time
+TwoGroups(normative_dat$ImPACT_Reaction_Time_Score_Pre,normative_dat$Age_Group)
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(ImPACT_Reaction_Time_Score_Pre)
+ggqqplot(normative_dat,x="ImPACT_Reaction_Time_Score_Pre",facet.by="Age_Group")
+
+##PCSS
+TwoGroups(normative_dat$PCSS_TSS_Pre,normative_dat$Age_Group)
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(PCSS_TSS_Pre)
+ggqqplot(normative_dat,x="PCSS_TSS_Pre",facet.by="Age_Group")
+
+####SCAT5####
+##GSC TSS
+TwoGroups(normative_dat$SCAT5_GSC_TSS_Pre,normative_dat$Age_Group,main="GSC TSS")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(SCAT5_GSC_TSS_Pre)
+ggqqplot(normative_dat,x="SCAT5_GSC_TSS_Pre",facet.by="Age_Group")
+
+##GSC SSS
+TwoGroups(normative_dat$SCAT5_GSC_SSS_Pre,normative_dat$Age_Group,main="GSC SSS")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(SCAT5_GSC_SSS_Pre)
+ggqqplot(normative_dat,x="SCAT5_GSC_SSS_Pre",facet.by="Age_Group")
+
+##SAC Orientation
+xt_age<-function(x){chisq.test(xtabs(~ x + Age_Group, data=normative_dat))$expected}
+
+xt_age(normative_dat$SCAT5_SAC_Orient_Pre)
+#Expected values <5 in >80% of cells
+#Use Fisher exact test
+
+##SAC Immediate Memory
+TwoGroups(normative_dat$SCAT5_SAC_Mem_Pre,normative_dat$Age_Group)
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(SCAT5_SAC_Mem_Pre)
+ggqqplot(normative_dat,x="SCAT5_SAC_Mem_Pre",facet.by="Age_Group")
+normative_dat %>% levene_test(SCAT5_SAC_Mem_Pre~Age_Group)
+
+##SAC Digits
+xt_age(normative_dat$SCAT5_SAC_Dig_Pre)
+#Use Chi-square test
+
+##SAC Months
+xt_age(normative_dat$SCAT5_SAC_Months_Pre)
+#Use Fisher exact test
+
+##SAC Concentration
+xt_age(normative_dat$SCAT5_SAC_Con_Pre)
+#Use Fisher exact test
+
+##SAC Delayed Memory
+TwoGroups(normative_dat$SCAT5_SAC_Mem_Delay_Pre,normative_dat$Age_Group)
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(SCAT5_SAC_Mem_Delay_Pre)
+ggqqplot(normative_dat,x="SCAT5_SAC_Mem_Delay_Pre",facet.by="Age_Group")
+
+##FTN
+TwoGroups(normative_dat$SCAT5_Neuro_FTN_Time_Pre,normative_dat$Age_Group)
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(SCAT5_Neuro_FTN_Time_Pre)
+ggqqplot(normative_dat,x="SCAT5_Neuro_FTN_Time_Pre",facet.by="Age_Group")
+normative_dat %>% levene_test(SCAT5_Neuro_FTN_Time_Pre ~ Age_Group)
+
+##Tandem Gait
+TwoGroups(normative_dat$SCAT5_Neuro_Time_TG_Pre,normative_dat$Age_Group)
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(SCAT5_Neuro_Time_TG_Pre)
+ggqqplot(normative_dat,x="SCAT5_Neuro_Time_TG_Pre",facet.by="Age_Group")
+
+##mBESS Total
+TwoGroups(normative_dat$SCAT5_BESS_Tot_Pre,normative_dat$Age_Group,main="mBESS Total Score")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(SCAT5_BESS_Tot_Pre)
+ggqqplot(normative_dat,x="SCAT5_BESS_Tot_Pre",facet.by="Age_Group")
+
+##mBESS Double-Leg
+xt_age(normative_dat$SCAT5_BESS_DL_Pre)
+#Use Fisher exact test
+
+##mBESS Single-Leg
+TwoGroups(normative_dat$SCAT5_BESS_SL_Pre,normative_dat$Age_Group,main="mBESS Single-Leg Score")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(SCAT5_BESS_SL_Pre)
+ggqqplot(normative_dat,x="SCAT5_BESS_SL_Pre",facet.by="Age_Group")
+
+##mBESS Tandem
+TwoGroups(normative_dat$SCAT5_BESS_Tandem_Stance_Pre,normative_dat$Age_Group,main="mBESS Tandem Score")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(SCAT5_BESS_Tandem_Stance_Pre)
+ggqqplot(normative_dat,x="SCAT5_BESS_Tandem_Stance_Pre",facet.by="Age_Group")
+
+####VOMS####
+
+##Smooth Pursuits
+xt_age(normative_dat$VOMS_SP)
+#Use Fisher exact
+
+##Horizontal Saccades
+xt_age(normative_dat$VOMS_H_Sacc)
+#Use Fisher exact
+
+##Vertical Saccades
+xt_age(normative_dat$VOMS_V_Sacc)
+#Use Chi-square
+
+##Convergence
+xt_age(normative_dat$VOMS_Converg)
+#Use Fisher exact
+
+##Horizontal VOR
+xt_age(normative_dat$VOMS_H_VOR)
+#Use Fisher exact
+
+##Vertical VOR
+xt_age(normative_dat$VOMS_V_VOR)
+#Use Fisher exact
+
+##VMS
+xt_age(normative_dat$VOMS_VMS)
+#Use Fisher exact
+
+##NPC
+xt_age(normative_dat$VOMS_NPC)
+#Use Fisher exact
+
+##VOMS Total
+xt_age(normative_dat$VOMS_Cutoff)
+#Use Chi-square
+
+####Neck Dynamometry####
+TwoGroups(normative_dat$Neck_Flex_Avg_Pre,normative_dat$Age_Group,main="Neck Flexion")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(Neck_Flex_Avg_Pre)
+ggqqplot(normative_dat,x="Neck_Flex_Avg_Pre",facet.by="Age_Group")
+normative_dat %>% levene_test(Neck_Flex_Avg_Pre ~ Age_Group)
+
+##Neck Extension
+TwoGroups(normative_dat$Neck_Ext_Avg_Pre,normative_dat$Age_Group,main="Neck Extension")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(Neck_Ext_Avg_Pre)
+ggqqplot(normative_dat,x="Neck_Ext_Avg_Pre",facet.by="Age_Group")
+normative_dat %>% levene_test(Neck_Ext_Avg_Pre ~ Age_Group)
+
+##Neck Lateral Flexion, dominant side
+TwoGroups(normative_dat$Neck_LatFlex_D_Avg_Pre,normative_dat$Age_Group,main="Neck Lateral Flexion, dominant side")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(Neck_LatFlex_D_Avg_Pre)
+ggqqplot(normative_dat,x="Neck_LatFlex_D_Avg_Pre",facet.by="Age_Group")
+normative_dat %>% levene_test(Neck_LatFlex_D_Avg_Pre ~ Age_Group)
+
+##Neck Lateral Flexion, non-dominant side
+TwoGroups(normative_dat$Neck_LatFlex_ND_Avg_Pre,normative_dat$Age_Group,main="Neck Lateral Flexion, non-dominant side")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(Neck_LatFlex_ND_Avg_Pre)
+ggqqplot(normative_dat,x="Neck_LatFlex_ND_Avg_Pre",facet.by="Age_Group")
+normative_dat %>% levene_test(Neck_LatFlex_ND_Avg_Pre ~ Age_Group)
+
+##Neck Rotation, dominant side
+TwoGroups(normative_dat$Neck_SCM_D_Avg_Pre,normative_dat$Age_Group,main="Neck Rotation, dominant side")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(Neck_SCM_D_Avg_Pre)
+ggqqplot(normative_dat,x="Neck_SCM_D_Avg_Pre",facet.by="Age_Group")
+
+##Neck Rotation, non-dominant side
+TwoGroups(normative_dat$Neck_SCM_ND_Avg_Pre,normative_dat$Age_Group,main="Neck Rotation, non-dominant side")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(Neck_SCM_ND_Avg_Pre)
+ggqqplot(normative_dat,x="Neck_SCM_ND_Avg_Pre",facet.by="Age_Group")
+
+CTs_age_df<-data.frame(Outcome=c("Verbal Memory Score","Visual Memory Score","Visual Motor Score","Reaction Time","Post-Concussion Symptom Score",
+                               "Total Symptom Score","Symptom Severity Score","Orientation","Immediate Memory","Digits Backwards","Months Backwards","Concentration","Delayed Memory",
+                               "Finger-to-nose Time","Tandem Gait Time","mBESS Total Score","mBESS Double-Leg Score","mBESS Single-Leg Score","mBESS Tandem Stance Score",
+                               "Smooth Pursuits","Horizontal Saccades Score","Vertical Saccades Score","Convergence Score","Horizontal VOR Score","Vertical VOR Score","Visual Motion Sensitivity Score","Near Point of Convergence","VOMS Cutoff",
+                               "Neck Flexion","Neck Extension","Dominant Side Lateral Neck Flexion","Non-Dominant Side Lateral Neck Flexion","Dominant Side Neck Rotation","Non-Dominant Side Neck Rotation"),
+                               
+                     Test=c("Wilcoxon","Wilcoxon","Independent t-test","Wilcoxon","Wilcoxon",
+                            "Wilcoxon","Wilcoxon", "Fisher exact","Independent t-test","Chi-square","Fisher exact","Fisher exact","Wilcoxon","Independent t-test","Wilcoxon","Wilcoxon","Fisher exact","Wilcoxon","Wilcoxon",
+                            "Fisher exact","Fisher exact","Chi-square","Fisher exact","Fisher exact","Fisher exact","Fisher exact","Fisher exact","Chi-square",
+            "Independent t-test","Independent t-test","Independent t-test","Independent t-test","Wilcoxon","Wilcoxon"))
+kable(CTs_age_df)
+```
+##### 8.2.2.1.1. Health Questionnaires
+```{r Explore HQs by age, warning=FALSE}
+
+####CP Screen####
+##CP Total
+TwoGroups(normative_dat$CP_Tot_Pre,normative_dat$Age_Group,main="CP Total")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(CP_Tot_Pre)
+ggqqplot(normative_dat,x="CP_Tot_Pre",facet.by="Age_Group")
+
+##Cognitive
+TwoGroups(normative_dat$CP_Cog_Avg_Pre,normative_dat$Age_Group,main="CP Migraine")
+
+##Migraine
+TwoGroups(normative_dat$CP_Mig_Avg_Pre,normative_dat$Age_Group,main="CP Migraine")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(CP_Mig_Pre)
+ggqqplot(normative_dat,x="CP_Mig_Pre",facet.by="Age_Group")
+
+##Mood
+TwoGroups(normative_dat$CP_Anx_Avg_Pre,normative_dat$Age_Group,main="CP Anxiety/Mood")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(CP_Anx_Pre)
+ggqqplot(normative_dat,x="CP_Anx_Pre",facet.by="Age_Group")
+
+##Vestibular
+TwoGroups(normative_dat$CP_Vest_Avg_Pre,normative_dat$Age_Group,main="CP Vestibular")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(CP_Vest_Pre)
+ggqqplot(normative_dat,x="CP_Vest_Pre",facet.by="Age_Group")
+
+##Ocular
+TwoGroups(normative_dat$CP_Ocu_Avg_Pre,normative_dat$Age_Group,main="CP Ocular")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(CP_Ocu_Pre)
+ggqqplot(normative_dat,x="CP_Ocu_Pre",facet.by="County")
+
+##Neck
+TwoGroups(normative_dat$CP_Neck_Avg_Pre,normative_dat$Age_Group,main="CP Neck")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(CP_Neck_Pre)
+ggqqplot(normative_dat,x="CP_Neck_Pre",facet.by="Age_Group")
+
+##Sleep
+TwoGroups(normative_dat$CP_Sleep_Avg_Pre,normative_dat$Age_Group,main="CP Sleep")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(CP_Sleep_Pre)
+ggqqplot(normative_dat,x="CP_Sleep_Pre",facet.by="Age_Group")
+
+####PHQ-9 & GAD7####
+##PHQ9 Total
+TwoGroups(normative_dat$PHQ9_Tot_Pre,normative_dat$Age_Group,main="PHQ-9")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(PHQ9_Tot_Pre)
+ggqqplot(normative_dat,x="PHQ9_Tot_Pre",facet.by="Age_Group")
+
+##PHQ9 Grade
+xt_age(normative_dat$PHQ9_Scores)
+#Use Fisher exact
+
+##PHQ9 Cutoff
+xt_age(normative_dat$PHQ9_cutoff)
+#Use Fisher exact
+
+##GAD7 Total
+TwoGroups(normative_dat$GAD7_Tot_Pre,normative_dat$Age_Group,main="GAD-7")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(GAD7_Tot_Pre)
+ggqqplot(normative_dat,x="GAD7_Tot_Pre",facet.by="Age_Group")
+
+##GAD7 Grades
+xt_age(normative_dat$GAD7_Scores)
+#Use Fisher exact
+
+##GAD7 Cutoff
+xt_age(normative_dat$GAD7_cutoff)
+#Use Fisher exact
+
+####NBQ & MIDAS####
+TwoGroups(normative_dat$NBQ_Tot_Pre,normative_dat$Age_Group,main="NBQ")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(NBQ_Tot_Pre)
+ggqqplot(normative_dat,x="NBQ_Tot_Pre",facet.by="Age_Group")
+
+##MIDAS Total
+TwoGroups(normative_dat$MIDAS_Tot_Pre,normative_dat$Age_Group,main="MIDAS")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(MIDAS_Tot_Pre)
+ggqqplot(normative_dat,x="MIDAS_Tot_Pre",facet.by="Age_Group")
+
+##MIDAS Grades
+xt_age(normative_dat$MIDAS_Grade_Pre)
+#Use Fisher exact
+
+####PSQI####
+##Global Score
+TwoGroups(normative_dat$PSQI_Global_Pre,normative_dat$Age_Group,main="PSQI Total")
+
+normative_dat %>% group_by(Age_Group) %>% shapiro_test(PSQI_Global_Pre)
+ggqqplot(normative_dat,x="PSQI_Global_Pre",facet.by="Age_Group")
+
+##C1
+xt_age(normative_dat$PSQI_C1_Pre)
+#Use Fisher exact
+
+##C2
+xt_age(normative_dat$PSQI_C2_Pre)
+
+##C3
+xt_age(normative_dat$PSQI_C3_Pre)
+#Use Fisher exact
+
+##C4
+xt_age(normative_dat$PSQI_C4_Pre)
+#Use Fisher exact
+
+##C5
+xt_age(normative_dat$PSQI_C5_Pre)
+#Use Fisher
+
+##C6
+xt_age(normative_dat$PSQI_C6_Pre)
+#Use Fisher exact
+
+##C7
+xt_age(normative_dat$PSQI_C7_Pre)
+#Use Fisher exact
+
+healthQ_age_df<-data.frame(Outcome=c("CP Total Score","CP Cognitive/Fatigue Score","CP Migraine Score","CP Vestibular Score","CP Ocular Score","CP Anxiety/Mood Score","CP Sleep Score","CP Neck Score",
+                               "PHQ-9 Score","PHQ-9 Grades","PHQ-9 Cutoff",
+                               "GAD-7 Score","GAD-7 Grades","GAD-7 Cutoff",
+                               "Neck Bournemouth Score","MIDAS Score","MIDAS Grade",
+                               "PSQI Global Score","PSQI C1 Score","PSQI C2 Score","PSQI C3 Score","PSQI C4 Score","PSQI C5 Score","PSQI C6 Score","PSQI C7 Score","PSQI Cutoff"),
+                             Test=c("Wilcoxon","Wilcoxon","Wilcoxon","Wilcoxon","Wilcoxon","Wilcoxon","Wilcoxon","Wilcoxon",
+##PHQ-9
+        "Wilcoxon","Fisher exact","Fisher exact",
+#GAD-7  
+        "Wilcoxon","Fisher exact","Fisher exact",
+#NBQ & MIDAS
+        "Wilcoxon","Wilcoxon","Fisher exact",
+#PSQI
+            "Wilcoxon","Fisher exact","Chi-square","Fisher exact","Fisher exact","Fisher exact","Fisher exact","Fisher exact","Fisher exact"))
+kable(healthQ_age_df)
+```
+#### 8.2.2.2. Analysis (Continuous Variables)
+
+##### 8.2.2.2.1. Clinical Tests
+```{r CTs by age (continuous), warning=FALSE}
+
+##Wilcox tests
+CT_age_Wilcox_df<-normative_dat %>%
+  select(ImPACT_Verbal_Mem_Score_Pre,ImPACT_Visual_Mem_Score_Pre,ImPACT_Reaction_Time_Score_Pre,PCSS_TSS_Pre,SCAT5_GSC_TSS_Pre,SCAT5_GSC_SSS_Pre,SCAT5_SAC_Mem_Delay_Pre,SCAT5_Neuro_Time_TG_Pre,SCAT5_BESS_Tot_Pre,SCAT5_BESS_SL_Pre,SCAT5_BESS_Tandem_Stance_Pre,Neck_SCM_D_Avg_Pre,Neck_SCM_ND_Avg_Pre) 
+
+CT_age_Wilcox<-CT_age_Wilcox_df %>%
+  map_df(~tidy(wilcox.test(.~Age_Group,data=normative_dat)),.id="Outcome")
+CT_age_Wilcox
+
+wilcox_es_age<-function(x){rank_biserial(x ~ Age_Group, data=normative_dat, alternative="two.sided")}
+
+CT_wilcox_age_es<-CT_age_Wilcox_df %>%
+  map(.,wilcox_es_age)
+CT_wilcox_age_es<-ldply(CT_wilcox_age_es,data.frame)
+CT_wilcox_age_es$CI<-sprintf("%2.2f-%2.2f",CT_wilcox_age_es$CI_low,CT_wilcox_age_es$CI_high)
+CT_wilcox_age_es$es<-sprintf("%2.2f (%s)",CT_wilcox_age_es$r_rank_biserial,CT_wilcox_age_es$CI)
+CT_wilcox_age_es<-CT_wilcox_age_es %>% select(c(.id,es))
+CT_wilcox_age_es
+
+##T-tests
+CT_age_Ttest_df<-normative_dat %>%
+  select(ImPACT_Visual_Motor_Score_Pre,SCAT5_SAC_Mem_Pre,SCAT5_Neuro_FTN_Time_Pre,Neck_Flex_Avg_Pre:Neck_LatFlex_ND_Avg_Pre) 
+
+CT_age_Ttest<-CT_age_Ttest_df %>%
+  map_df(~tidy(t.test(.~Age_Group,data=normative_dat)),.id="Outcome")
+CT_age_Ttest
+
+ttest_es_age<-function(x){glass_delta(x ~ County, data=normative_dat, alternative="two.sided")}
+
+CT_ttest_age_es<-CT_age_Ttest_df %>% 
+  map(.,ttest_es_level)
+CT_ttest_age_es<-ldply(CT_ttest_age_es,data.frame)
+CT_ttest_age_es$CI<-sprintf("%2.2f-%2.2f",CT_ttest_age_es$CI_low,CT_ttest_age_es$CI_high)
+CT_ttest_age_es$es<-sprintf("%2.2f (%s)",CT_ttest_age_es$Glass_delta,CT_ttest_age_es$CI)
+CT_ttest_age_es<-CT_ttest_age_es %>% select(c(.id,es))
+CT_ttest_age_es
+```
+##### 8.2.2.2.2. Health Questionnaires
+```{r HQs by age (continuous), warning=FALSE}
+
+HQ_age_Wilcox_df<-normative_dat %>%
+  select(CP_Tot_Pre:PHQ9_Tot_Pre,GAD7_Tot_Pre,NBQ_Tot_Pre,MIDAS_Tot_Pre,PSQI_Global_Pre) 
+
+HQ_age_Wilcox<-HQ_age_Wilcox_df %>%
+  map_df(~tidy(wilcox.test(.~Age_Group,data=normative_dat)),.id="Outcome")
+HQ_age_Wilcox
+
+HQ_wilcox_age_es<-HQ_age_Wilcox_df %>%
+  map(.,wilcox_es_age)
+HQ_wilcox_age_es<-ldply(HQ_wilcox_age_es,data.frame)
+HQ_wilcox_age_es$CI<-sprintf("%2.2f-%2.2f",HQ_wilcox_age_es$CI_low,HQ_wilcox_age_es$CI_high)
+HQ_wilcox_age_es$es<-sprintf("%2.2f (%s)",HQ_wilcox_age_es$r_rank_biserial,HQ_wilcox_age_es$CI)
+HQ_wilcox_age_es<-HQ_wilcox_age_es %>% select(c(.id,es))
+HQ_wilcox_age_es
+```
+#### 8.2.2.3. Analysis (Categorical Variables)
+
+##### 8.2.2.3.1. Clinical Tests
+```{r CTs by age (categorical), warning=FALSE}
+
+##Create long format dataframe of categorical clinical test outcomes
+CTs_age_cat_df<-normative_dat %>%
+  select(Age_Group,SCAT5_SAC_Orient_Pre,SCAT5_SAC_Dig_Pre,SCAT5_SAC_Months_Pre,SCAT5_SAC_Con_Pre,SCAT5_BESS_DL_Pre,VOMS_SP:VOMS_NPC,VOMS_Cutoff) %>%
+  gather(key="Test",value="value",SCAT5_SAC_Orient_Pre:VOMS_Cutoff)
+
+##Create dataframe for Chi-square analysis
+CTs_age_df_chisq<-CTs_age_cat_df %>% 
+  filter(Test=="SCAT5_SAC_Dig_Pre"|Test=="VOMS_V_Sacc"|Test=="VOMS_Cutoff")
+##Create dataframe for Fisher exact analysis
+CTs_age_df_fisher<-CTs_age_cat_df %>%
+  filter(Test!="SCAT5_SAC_Dig_Pre"&Test!="VOMS_V_Sacc"&Test!="VOMS_Cutoff")
+  
+##Chi-square tests
+CTs_age_chisq<-CTs_age_df_chisq %>%
+  group_by(Test) %>%
+  nest(data=c(Age_Group,value)) %>%
+  mutate(chisq=map(data,~tidy(chisq.test(.$Age_Group,.$value)))) %>%
+  mutate(cramer=map(data,~cramers_v(.$Age_Group,.$value,alternative="two.sided"))) %>%
+  select(-data) %>%
+  unnest(cols=c(chisq,cramer))
+CTs_age_chisq
+
+##Fisher exact tests
+CTs_age_fisher<-CTs_age_df_fisher %>%
+  group_by(Test) %>%
+  nest(data=c(Age_Group,value)) %>%
+  mutate(fisher=map(data,~tidy(fisher.test(.$Age_Group,.$value)))) %>%
+  mutate(cramer=map(data,~cramers_v(.$Age_Group,.$value,alternative="two.sided"))) %>%
+  select(-data) %>%
+  unnest(cols=c(fisher))
+CTs_age_fisher
+```
+##### 8.2.2.3.2. Health Questionnaires
+```{r HQs by age (categorical), warning=FALSE}
+
+##Create long format dataframe of categorical health questionnaire outcomes
+HQ_age_cat_df<-normative_dat %>%
+  select(Age_Group,PHQ9_Scores,PHQ9_cutoff,GAD7_Scores,GAD7_cutoff,MIDAS_Grade_Pre,PSQI_C1_Pre:PSQI_C7_Pre,PSQI_Sleep_Quality) %>%
+  gather(key="Test",value="value",PHQ9_Scores:PSQI_Sleep_Quality)
+
+##Create dataframe for Chi-square analysis
+HQ_age_df_chisq<-HQ_age_cat_df %>% 
+  filter(Test=="PSQI_C2_Pre")
+##Create dataframe for Fisher exact analysis
+HQ_age_df_fisher<-HQ_age_cat_df %>%
+  filter(Test!="PSQI_C2_Pre")
+  
+##Chi-square tests
+HQ_age_chisq<-HQ_age_df_chisq %>%
+  group_by(Test) %>%
+  nest(data=c(Age_Group,value)) %>%
+  mutate(chisq=map(data,~tidy(chisq.test(.$Age_Group,.$value)))) %>%
+  mutate(cramer=map(data,~cramers_v(.$Age_Group,.$value,alternative="two.sided"))) %>%
+  select(-data) %>%
+  unnest(cols=c(chisq))
+HQ_age_chisq
+
+##Fisher exact tests
+HQ_age_fisher<-HQ_age_df_fisher %>%
+  group_by(Test) %>%
+  nest(data=c(Age_Group,value)) %>%
+  mutate(fisher=map(data,~tidy(fisher.test(.$Age_Group,.$value)))) %>%
+  mutate(cramer=map(data,~cramers_v(.$Age_Group,.$value,alternative="two.sided"))) %>%
+  select(-data) %>%
+  unnest(cols=c(fisher))
+HQ_age_fisher
+```
+#### 8.2.2.4. Correction for Multiple Comparisons
+```{r Multiple comparison by age}
+
+age_pvalues<-c(CT_age_Wilcox$p.value,CT_age_Ttest$p.value,HQ_age_Wilcox$p.value,CTs_age_chisq$p.value,CTs_age_fisher$p.value,HQ_age_chisq$p.value,HQ_age_fisher$p.value)
+
+age_pvalues_adj<-p.adjust(age_pvalues,method="holm")
+
+age_pvalues_df<-data.frame(Outcome=c(CT_age_Wilcox$Outcome,CT_age_Ttest$Outcome,HQ_age_Wilcox$Outcome,CTs_age_chisq$Test,CTs_age_fisher$Test,HQ_age_chisq$Test,HQ_age_fisher$Test),
+                             Original=age_pvalues,
+                             Adjusted=age_pvalues_adj)
+age_pvalues_df<-age_pvalues_df%>%mutate(across(c(Original,Adjusted),round,5))
+kable(age_pvalues_df)
+
+age_pvalues_ft<-flextable(age_pvalues_df)
+age_pvalues_ft<-add_header_lines(age_pvalues_ft,values="Age")
+age_pvalues_ft<-colformat_double(age_pvalues_ft,digits=3)
+```
+#### 8.2.2.5. Plots of Significant Results
+```{r Plots by age}
+
+##ImPACT
+##Visual Motor Speed- t-test
+vismot_diff_p1<-ggbetweenstats(
+  normative_dat, x=Age_Group, y=ImPACT_Visual_Motor_Score_Pre,
+  plot.type="box",
+  type="parametric", pairwise.comparisons=FALSE, 
+  p.adjust.method="holm", 
+  results.subtitle = FALSE, 
+  xlab="Age Group", ylab="Visual Motor Speed \n", title="A",
+  k=1,
+  centrality.point.args=list(color="black",size=3),
+  package="RColorBrewer", palette="Dark2", ggtheme=theme_classic())
+ggsave("VisMot_age.png")
+
+##Reaction Time- Wilcoxon
+RT_diff_p1<-ggbetweenstats(
+  normative_dat, x=Age_Group, y=ImPACT_Reaction_Time_Score_Pre,
+  plot.type="box",
+  type="nonparametric", pairwise.comparisons=FALSE, 
+  p.adjust.method="holm", 
+  results.subtitle = FALSE, 
+  xlab="Age Group", ylab="Reaction Time \n", title="B",
+  k=1,
+  centrality.point.args=list(color="black",size=3),
+  package="RColorBrewer", palette="Dark2", ggtheme=theme_classic())
+ggsave("RT_diff_p1.png")
+
+##SCAT5 SAC Digits Backwards- chi-square
+Digits_diff_p1<-ggbarstats(
+  normative_dat, x=Age_Group, y=SCAT5_SAC_Dig_Pre,
+  results.subtitle=FALSE,
+  perc.k=1L,
+  title="A",
+  xlab="Digits Backwards Score",
+  ggtheme=theme_classic())
+ggsave("digits_diff_p1.png")
+
+##SCAT5 SAC Total Concentration- Fisher exact
+concent_diff_p1<-ggbarstats(
+  normative_dat, x=Age_Group, y=SCAT5_SAC_Con_Pre,
+  type="non-parametric",
+  results.subtitle=FALSE,
+  perc.k=1L,
+  title="B",
+  xlab="Concentration Score",
+  ggtheme=theme_classic())
+ggsave("concent_diff_p1.png")
+
+##mBESS Tandem Gait Stance- Wilcoxon
+BESS_TG_diff_p1<-ggbetweenstats(
+  normative_dat, x=Age_Group, y=SCAT5_BESS_Tandem_Stance_Pre,
+  plot.type="box",
+  type="non-parametric", pairwise.comparisons=FALSE,
+  p.adjust.method="Holm",
+  results.subtitle=FALSE,
+  xlab="Age Group", ylab="mBESS Tandem Stance \n", title="C", 
+  k=1,
+  centrality.point.args=list(color="black",size=3),
+  package="RColorBrewer", palette="Dark2", 
+  ggtheme=theme_classic())
+ggsave("BESS_TG_diff.png")
+
+##mBESS Total- Wilcoxon
+BESS_Tot_diff_p1<-ggbetweenstats(
+  normative_dat, x=Age_Group, y=SCAT5_BESS_Tot_Pre,
+  plot.type="box",
+  type="non-parametric", pairwise.comparisons=FALSE,
+  p.adjust.method="Holm",
+  results.subtitle=FALSE,
+  xlab="Age Group", ylab="mBESS Total Score \n", title="D", 
+  k=1,
+  centrality.point.args=list(color="black",size=3),
+  package="RColorBrewer", palette="Dark2", 
+  ggtheme=theme_classic())
+ggsave("BESS_Tot_diff.png")
+
+##Neck Lateral Flexion Non-Dominant Side- t-test
+Neck_LF_ND_diff_p1<-ggbetweenstats(
+  normative_dat, x=Age_Group, y=Neck_LatFlex_ND_Avg_Pre,
+  plot.type="box",
+  type="parametric", pairwise.comparisons=FALSE,
+  p.adjust.method="Holm",
+  results.subtitle=FALSE,
+  xlab="Age Group", ylab="ND Lateral Flexion \n", title="E",
+  k=1,
+  centrality.point.args=list(color="black",size=3),
+  package="RColorBrewer", palette="Dark2", 
+  ggtheme=theme_classic())
+ggsave("Neck_LF_ND_diff.png")
+
+##CP Vestibular Score- Wilcoxon
+CP_vest_diff_p1<-ggbetweenstats(
+  normative_dat, x="Age_Group", y="CP_Vest_Avg_Pre",
+  plot.type="box",
+  type="non-parametric", pairwise.comparisons=FALSE,
+  p.adjust.method="Holm",
+  results.subtitle=FALSE,
+  xlab="Age Group", ylab="Vestibular Score \n", title="F", k=1,
+  centrality.point.args=list(color="black",size=3),
+  package="RColorBrewer", palette="Dark2", 
+  ggtheme=theme_classic())
+ggsave("CP_vest_diff.png")
+
+vismot_diff_p1
+RT_diff_p1
+Digits_diff_p1
+concent_diff_p1
+BESS_TG_diff_p1
+BESS_Tot_diff_p1
+Neck_LF_ND_diff_p1
+CP_vest_diff_p1
+
+age_diff_p1<-(vismot_diff_p1 + BESS_TG_diff_p1 + Neck_LF_ND_diff_p1) / (RT_diff_p1 + BESS_Tot_diff_p1 + CP_vest_diff_p1) 
+age_diff_p1
+ggsave("tests_diff_age2.png",width=10,height=6)
+
+age_diff_p2<-(Digits_diff_p1 + concent_diff_p1) +
+  plot_layout(guides="collect")
+age_diff_p2
+ggsave("SAC_diff_age2.png",width=10,height=5)
+```
+
+### 8.2.3. Concussion History
+
+#### 8.2.3.1. Explore Outcomes
+
+##### 8.2.3.1.1. Clinical Tests
+```{r CTs by concussion history, warning=FALSE}
+
+####ImPACT####
+##Verbal Memory
+TwoGroups(normative_dat$ImPACT_Verbal_Mem_Score_Pre,normative_dat$ConHis_Diag)
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(ImPACT_Verbal_Mem_Score_Pre)
+ggqqplot(normative_dat,x="ImPACT_Verbal_Mem_Score_Pre",facet.by="ConHis_Diag")
+
+##Visual Memory
+TwoGroups(normative_dat$ImPACT_Visual_Mem_Score_Pre,normative_dat$ConHis_Diag)
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(ImPACT_Visual_Mem_Score_Pre)
+ggqqplot(normative_dat,x="ImPACT_Visual_Mem_Score_Pre",facet.by="ConHis_Diag")
+
+##Visual Motor Speed
+TwoGroups(normative_dat$ImPACT_Visual_Motor_Score_Pre,normative_dat$ConHis_Diag)
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(ImPACT_Visual_Motor_Score_Pre)
+ggqqplot(normative_dat,x="ImPACT_Visual_Motor_Score_Pre",facet.by="ConHis_Diag")
+
+##Reaction Time
+TwoGroups(normative_dat$ImPACT_Reaction_Time_Score_Pre,normative_dat$ConHis_Diag)
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(ImPACT_Reaction_Time_Score_Pre)
+ggqqplot(normative_dat,x="ImPACT_Reaction_Time_Score_Pre",facet.by="ConHis_Diag")
+
+##PCSS
+TwoGroups(normative_dat$PCSS_TSS_Pre,normative_dat$ConHis_Diag)
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(PCSS_TSS_Pre)
+ggqqplot(normative_dat,x="PCSS_TSS_Pre",facet.by="ConHis_Diag")
+
+####SCAT5####
+##GSC TSS
+TwoGroups(normative_dat$SCAT5_GSC_TSS_Pre,normative_dat$ConHis_Diag,main="GSC TSS")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(SCAT5_GSC_TSS_Pre)
+ggqqplot(normative_dat,x="SCAT5_GSC_TSS_Pre",facet.by="ConHis_Diag")
+
+##GSC SSS
+TwoGroups(normative_dat$SCAT5_GSC_SSS_Pre,normative_dat$ConHis_Diag,main="GSC SSS")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(SCAT5_GSC_SSS_Pre)
+ggqqplot(normative_dat,x="SCAT5_GSC_SSS_Pre",facet.by="Age_Group")
+
+##SAC Orientation
+xt_con_his<-function(x){chisq.test(xtabs(~ x + ConHis_Diag, data=normative_dat))$expected}
+
+xt_con_his(normative_dat$SCAT5_SAC_Orient_Pre)
+#Expected values <5 in >80% of cells
+#Use Fisher exact test
+
+##SAC Immediate Memory
+TwoGroups(normative_dat$SCAT5_SAC_Mem_Pre,normative_dat$ConHis_Diag)
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(SCAT5_SAC_Mem_Pre)
+ggqqplot(normative_dat,x="SCAT5_SAC_Mem_Pre",facet.by="ConHis_Diag")
+
+##SAC Digits
+xt_con_his(normative_dat$SCAT5_SAC_Dig_Pre)
+#Use Chi-square test
+
+##SAC Months
+xt_con_his(normative_dat$SCAT5_SAC_Months_Pre)
+#Use Fisher exact test
+
+##SAC Concentration
+xt_con_his(normative_dat$SCAT5_SAC_Con_Pre)
+#Use Fisher exact test
+
+##SAC Delayed Memory
+TwoGroups(normative_dat$SCAT5_SAC_Mem_Delay_Pre,normative_dat$ConHis_Diag)
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(SCAT5_SAC_Mem_Delay_Pre)
+ggqqplot(normative_dat,x="SCAT5_SAC_Mem_Delay_Pre",facet.by="ConHis_Diag")
+
+##FTN
+TwoGroups(normative_dat$SCAT5_Neuro_FTN_Time_Pre,normative_dat$ConHis_Diag)
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(SCAT5_Neuro_FTN_Time_Pre)
+ggqqplot(normative_dat,x="SCAT5_Neuro_FTN_Time_Pre",facet.by="ConHis_Diag")
+normative_dat %>% levene_test(SCAT5_Neuro_FTN_Time_Pre ~ ConHis_Diag)
+
+##Tandem Gait
+TwoGroups(normative_dat$SCAT5_Neuro_Time_TG_Pre,normative_dat$ConHis_Diag)
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(SCAT5_Neuro_Time_TG_Pre)
+ggqqplot(normative_dat,x="SCAT5_Neuro_Time_TG_Pre",facet.by="ConHis_Diag")
+
+##mBESS Total
+TwoGroups(normative_dat$SCAT5_BESS_Tot_Pre,normative_dat$ConHis_Diag,main="mBESS Total Score")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(SCAT5_BESS_Tot_Pre)
+ggqqplot(normative_dat,x="SCAT5_BESS_Tot_Pre",facet.by="ConHis_Diag")
+
+##mBESS Double-Leg
+xt_con_his(normative_dat$SCAT5_BESS_DL_Pre)
+#Use Fisher exact test
+
+##mBESS Single-Leg
+TwoGroups(normative_dat$SCAT5_BESS_SL_Pre,normative_dat$ConHis_Diag,main="mBESS Single-Leg Score")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(SCAT5_BESS_SL_Pre)
+ggqqplot(normative_dat,x="SCAT5_BESS_SL_Pre",facet.by="ConHis_Diag")
+
+##mBESS Tandem
+TwoGroups(normative_dat$SCAT5_BESS_Tandem_Stance_Pre,normative_dat$ConHis_Diag,main="mBESS Tandem Score")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(SCAT5_BESS_Tandem_Stance_Pre)
+ggqqplot(normative_dat,x="SCAT5_BESS_Tandem_Stance_Pre",facet.by="ConHis_Diag")
+
+####VOMS####
+
+##Smooth Pursuits
+xt_con_his(normative_dat$VOMS_SP)
+#Use Fisher exact
+
+##Horizontal Saccades
+xt_con_his(normative_dat$VOMS_H_Sacc)
+#Use Fisher exact
+
+##Vertical Saccades
+xt_con_his(normative_dat$VOMS_V_Sacc)
+#Use Fisher exact
+
+##Convergence
+xt_con_his(normative_dat$VOMS_Converg)
+#Use Fisher exact
+
+##Horizontal VOR
+xt_con_his(normative_dat$VOMS_H_VOR)
+#Use Fisher exact
+
+##Vertical VOR
+xt_con_his(normative_dat$VOMS_V_VOR)
+#Use Fisher exact
+
+##VMS
+xt_con_his(normative_dat$VOMS_VMS)
+#Use Fisher exact
+
+##NPC
+xt_con_his(normative_dat$VOMS_NPC)
+#Use Fisher exact
+
+##VOMS Total
+xt_con_his(normative_dat$VOMS_Cutoff)
+#Use Chi-square
+
+####Neck Dynamometry####
+TwoGroups(normative_dat$Neck_Flex_Avg_Pre,normative_dat$ConHis_Diag,main="Neck Flexion")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(Neck_Flex_Avg_Pre)
+ggqqplot(normative_dat,x="Neck_Flex_Avg_Pre",facet.by="ConHis_Diag")
+normative_dat %>% levene_test(Neck_Flex_Avg_Pre ~ ConHis_Diag)
+
+##Neck Extension
+TwoGroups(normative_dat$Neck_Ext_Avg_Pre,normative_dat$ConHis_Diag,main="Neck Extension")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(Neck_Ext_Avg_Pre)
+ggqqplot(normative_dat,x="Neck_Ext_Avg_Pre",facet.by="ConHis_Diag")
+normative_dat %>% levene_test(Neck_Ext_Avg_Pre ~ ConHis_Diag)
+
+##Neck Lateral Flexion, dominant side
+TwoGroups(normative_dat$Neck_LatFlex_D_Avg_Pre,normative_dat$ConHis_Diag,main="Neck Lateral Flexion, dominant side")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(Neck_LatFlex_D_Avg_Pre)
+ggqqplot(normative_dat,x="Neck_LatFlex_D_Avg_Pre",facet.by="ConHis_Diag")
+normative_dat %>% levene_test(Neck_LatFlex_D_Avg_Pre ~ ConHis_Diag)
+
+##Neck Lateral Flexion, non-dominant side
+TwoGroups(normative_dat$Neck_LatFlex_ND_Avg_Pre,normative_dat$ConHis_Diag,main="Neck Lateral Flexion, non-dominant side")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(Neck_LatFlex_ND_Avg_Pre)
+ggqqplot(normative_dat,x="Neck_LatFlex_ND_Avg_Pre",facet.by="ConHis_Diag")
+normative_dat %>% levene_test(Neck_LatFlex_ND_Avg_Pre ~ ConHis_Diag)
+
+##Neck Rotation, dominant side
+TwoGroups(normative_dat$Neck_SCM_D_Avg_Pre,normative_dat$ConHis_Diag,main="Neck Rotation, dominant side")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(Neck_SCM_D_Avg_Pre)
+ggqqplot(normative_dat,x="Neck_SCM_D_Avg_Pre",facet.by="ConHis_Diag")
+
+##Neck Rotation, non-dominant side
+TwoGroups(normative_dat$Neck_SCM_ND_Avg_Pre,normative_dat$ConHis_Diag,main="Neck Rotation, non-dominant side")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(Neck_SCM_ND_Avg_Pre)
+ggqqplot(normative_dat,x="Neck_SCM_ND_Avg_Pre",facet.by="ConHis_Diag")
+
+CTs_ConHis_df<-data.frame(Outcome=c("Verbal Memory Score","Visual Memory Score","Visual Motor Score","Reaction Time","Post-Concussion Symptom Score",
+                               "Total Symptom Score","Symptom Severity Score","Orientation","Immediate Memory","Digits Backwards","Months Backwards","Concentration","Delayed Memory",
+                               "Finger-to-nose Time","Tandem Gait Time","mBESS Total Score","mBESS Double-Leg Score","mBESS Single-Leg Score","mBESS Tandem Stance Score",
+                               "Smooth Pursuits","Horizontal Saccades Score","Vertical Saccades Score","Convergence Score","Horizontal VOR Score","Vertical VOR Score","Visual Motion Sensitivity Score","Near Point of Convergence","VOMS Cutoff",
+                               "Neck Flexion","Neck Extension","Dominant Side Lateral Neck Flexion","Non-Dominant Side Lateral Neck Flexion","Dominant Side Neck Rotation","Non-Dominant Side Neck Rotation"),
+                               
+                     Test=c("Wilcoxon","Wilcoxon","Independent t-test","Wilcoxon","Wilcoxon",
+                            "Wilcoxon","Wilcoxon", "Fisher exact","Wilcoxon","Chi-square","Fisher exact","Fisher exact","Wilcoxon",
+                            "Independent t-test","Wilcoxon","Wilcoxon","Fisher exact","Wilcoxon","Wilcoxon",
+                            "Fisher exact","Fisher exact","Fisher exact","Fisher exact","Fisher exact","Fisher exact","Fisher exact","Fisher exact","Chi-square",
+            "Independent t-test","Independent t-test","Independent t-test","Independent t-test","Wilcoxon","Wilcoxon"))
+kable(CTs_ConHis_df)
+```
+##### 8.2.3.1.2. Health Questionnaires
+```{r HQs by concussion history, warning=FALSE}
+
+####CP Screen####
+##CP Total
+TwoGroups(normative_dat$CP_Tot_Pre,normative_dat$ConHis_Diag,main="CP Total")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(CP_Tot_Pre)
+ggqqplot(normative_dat,x="CP_Tot_Pre",facet.by="ConHis_Diag")
+
+##Cognitive
+TwoGroups(normative_dat$CP_Cog_Avg_Pre,normative_dat$ConHis_Diag,main="CP Cognitive")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(CP_Cog_Avg_Pre)
+ggqqplot(normative_dat,x="CP_Cog_Avg_Pre",facet.by="ConHis_Diag")
+
+##Migraine
+TwoGroups(normative_dat$CP_Mig_Avg_Pre,normative_dat$ConHis_Diag,main="CP Migraine")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(CP_Mig_Pre)
+ggqqplot(normative_dat,x="CP_Mig_Pre",facet.by="ConHis_Diag")
+
+##Mood
+TwoGroups(normative_dat$CP_Anx_Avg_Pre,normative_dat$ConHis_Diag,main="CP Anxiety/Mood")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(CP_Anx_Pre)
+ggqqplot(normative_dat,x="CP_Anx_Pre",facet.by="ConHis_Diag")
+
+##Vestibular
+TwoGroups(normative_dat$CP_Vest_Avg_Pre,normative_dat$ConHis_Diag,main="CP Vestibular")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(CP_Vest_Pre)
+ggqqplot(normative_dat,x="CP_Vest_Pre",facet.by="ConHis_Diag")
+
+##Ocular
+TwoGroups(normative_dat$CP_Ocu_Avg_Pre,normative_dat$ConHis_Diag,main="CP Ocular")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(CP_Ocu_Pre)
+ggqqplot(normative_dat,x="CP_Ocu_Pre",facet.by="ConHis_Diag")
+
+##Neck
+TwoGroups(normative_dat$CP_Neck_Avg_Pre,normative_dat$ConHis_Diag,main="CP Neck")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(CP_Neck_Pre)
+ggqqplot(normative_dat,x="CP_Neck_Pre",facet.by="ConHis_Diag")
+
+##Sleep
+TwoGroups(normative_dat$CP_Sleep_Avg_Pre,normative_dat$ConHis_Diag,main="CP Sleep")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(CP_Sleep_Pre)
+ggqqplot(normative_dat,x="CP_Sleep_Pre",facet.by="ConHis_Diag")
+
+####PHQ-9 & GAD7####
+##PHQ9 Total
+TwoGroups(normative_dat$PHQ9_Tot_Pre,normative_dat$ConHis_Diag,main="PHQ-9")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(PHQ9_Tot_Pre)
+ggqqplot(normative_dat,x="PHQ9_Tot_Pre",facet.by="ConHis_Diag")
+
+##PHQ9 Grade
+xt_con_his(normative_dat$PHQ9_Scores)
+#Use Fisher exact
+
+##PHQ9 Cutoff
+xt_con_his(normative_dat$PHQ9_cutoff)
+#Use Fisher exact
+
+##GAD7 Total
+TwoGroups(normative_dat$GAD7_Tot_Pre,normative_dat$ConHis_Diag,main="GAD-7")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(GAD7_Tot_Pre)
+ggqqplot(normative_dat,x="GAD7_Tot_Pre",facet.by="ConHis_Diag")
+
+##GAD7 Grades
+xt_con_his(normative_dat$GAD7_Scores)
+#Use Fisher exact
+
+##GAD7 Cutoff
+xt_con_his(normative_dat$GAD7_cutoff)
+#Use Fisher exact
+
+####NBQ & MIDAS####
+TwoGroups(normative_dat$NBQ_Tot_Pre,normative_dat$ConHis_Diag,main="NBQ")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(NBQ_Tot_Pre)
+ggqqplot(normative_dat,x="NBQ_Tot_Pre",facet.by="ConHis_Diag")
+
+##MIDAS Total
+TwoGroups(normative_dat$MIDAS_Tot_Pre,normative_dat$ConHis_Diag,main="MIDAS")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(MIDAS_Tot_Pre)
+ggqqplot(normative_dat,x="MIDAS_Tot_Pre",facet.by="ConHis_Diag")
+
+##MIDAS Grades
+xt_con_his(normative_dat$MIDAS_Grade_Pre)
+#Use Fisher exact
+
+####PSQI####
+##Global Score
+TwoGroups(normative_dat$PSQI_Global_Pre,normative_dat$ConHis_Diag,main="PSQI Total")
+
+normative_dat %>% filter(!is.na(ConHis_Diag)) %>% group_by(ConHis_Diag) %>% shapiro_test(PSQI_Global_Pre)
+ggqqplot(normative_dat,x="PSQI_Global_Pre",facet.by="ConHis_Diag")
+
+##C1
+xt_con_his(normative_dat$PSQI_C1_Pre)
+#Use Fisher exact
+
+##C2
+xt_con_his(normative_dat$PSQI_C2_Pre)
+#Use Chi-square
+
+##C3
+xt_con_his(normative_dat$PSQI_C3_Pre)
+#Use Fisher exact
+
+##C4
+xt_con_his(normative_dat$PSQI_C4_Pre)
+#Use Fisher exact
+
+##C5
+xt_con_his(normative_dat$PSQI_C5_Pre)
+#Use Fisher exact
+
+##C6
+xt_con_his(normative_dat$PSQI_C6_Pre)
+#Use Fisher exact
+
+##C7
+xt_con_his(normative_dat$PSQI_C7_Pre)
+#Use Fisher exact
+
+healthQ_ConHis_df<-data.frame(Outcome=c("CP Total Score","CP Cognitive/Fatigue Score","CP Migraine Score","CP Vestibular Score","CP Ocular Score","CP Anxiety/Mood Score","CP Sleep Score","CP Neck Score",
+                               "PHQ-9 Score","PHQ-9 Grades","PHQ-9 Cutoff",
+                               "GAD-7 Score","GAD-7 Grades","GAD-7 Cutoff",
+                               "Neck Bournemouth Score","MIDAS Score","MIDAS Grade",
+                               "PSQI Global Score","PSQI C1 Score","PSQI C2 Score","PSQI C3 Score","PSQI C4 Score","PSQI C5 Score","PSQI C6 Score","PSQI C7 Score","PSQI Cutoff"),
+                             Test=c("Wilcoxon","Wilcoxon","Wilcoxon","Wilcoxon","Wilcoxon","Wilcoxon","Wilcoxon","Wilcoxon",
+##PHQ-9
+        "Wilcoxon","Fisher exact","Fisher exact",
+#GAD-7  
+        "Wilcoxon","Fisher exact","Fisher exact",
+#NBQ & MIDAS
+        "Wilcoxon","Wilcoxon","Fisher exact",
+#PSQI
+            "Wilcoxon","Fisher exact","Chi-square","Fisher exact","Fisher exact","Fisher exact","Fisher exact","Fisher exact","Fisher exact"))
+kable(healthQ_ConHis_df)
+```
+#### 8.2.3.2. Analysis (Continuous Variables)
+
+##### 8.2.3.2.1. Clinical Tests
+```{r CTs by concussion history (continuous)}
+
+##Wilcox rank sum test
+CT_ConHis_Wilcox_df<-normative_dat %>%
+  select(ImPACT_Verbal_Mem_Score_Pre,ImPACT_Visual_Mem_Score_Pre,ImPACT_Reaction_Time_Score_Pre,PCSS_TSS_Pre,SCAT5_GSC_TSS_Pre,SCAT5_GSC_SSS_Pre,SCAT5_SAC_Mem_Pre,SCAT5_SAC_Mem_Delay_Pre,SCAT5_Neuro_Time_TG_Pre,SCAT5_BESS_Tot_Pre,SCAT5_BESS_SL_Pre,SCAT5_BESS_Tandem_Stance_Pre,Neck_SCM_D_Avg_Pre,Neck_SCM_ND_Avg_Pre) 
+  
+CT_ConHis_Wilcox<-CT_ConHis_Wilcox_df %>% map_df(~tidy(wilcox.test(.~ConHis_Diag,data=normative_dat)),.id="Outcome")
+CT_ConHis_Wilcox
+
+wilcox_es_ConHis<-function(x){rank_biserial(x ~ ConHis_Diag, data=normative_dat, alternative="two.sided")}
+
+CT_wilcox_ConHis_es<-CT_ConHis_Wilcox_df %>%
+  map(.,wilcox_es_ConHis)
+CT_wilcox_ConHis_es<-ldply(CT_wilcox_ConHis_es,data.frame)
+CT_wilcox_ConHis_es$CI<-sprintf("%2.2f-%2.2f",CT_wilcox_ConHis_es$CI_low,CT_wilcox_ConHis_es$CI_high)
+CT_wilcox_ConHis_es$es<-sprintf("%2.2f (%s)",CT_wilcox_ConHis_es$r_rank_biserial,CT_wilcox_ConHis_es$CI)
+CT_wilcox_ConHis_es<-CT_wilcox_ConHis_es %>% select(c(.id,es))
+CT_wilcox_ConHis_es
+
+##T-test
+CT_ConHis_Ttest_df<-normative_dat %>%
+  select(ImPACT_Visual_Motor_Score_Pre,SCAT5_Neuro_FTN_Time_Pre,Neck_Flex_Avg_Pre:Neck_LatFlex_ND_Avg_Pre) 
+
+CT_ConHis_Ttest<-CT_ConHis_Ttest_df %>%
+  map_df(~tidy(t.test(.~ConHis_Diag,data=normative_dat)),.id="Outcome")
+CT_ConHis_Ttest
+
+ttest_es_ConHis<-function(x){glass_delta(x ~ ConHis_Diag, data=normative_dat, alternative="two.sided")}
+
+CT_ConHis_ttest_es<-CT_ConHis_Ttest_df %>%
+  map(.,ttest_es_ConHis)
+CT_ConHis_ttest_es<-ldply(CT_ConHis_ttest_es,data.frame)
+CT_ConHis_ttest_es$CI<-sprintf("%2.2f-%2.2f",CT_ConHis_ttest_es$CI_low,CT_ConHis_ttest_es$CI_high)
+CT_ConHis_ttest_es$es<-sprintf("%2.2f (%s)",CT_ConHis_ttest_es$Glass_delta,CT_ConHis_ttest_es$CI)
+CT_ConHis_ttest_es<-CT_ConHis_ttest_es %>% select(c(.id,es))
+CT_ConHis_ttest_es
+```
+##### 8.2.3.2.2. Health Questionnaires
+```{r HQs by concussion history (continuous)}
+
+HQ_ConHis_Wilcox_df<-normative_dat %>%
+  select(CP_Tot_Pre:PHQ9_Tot_Pre,GAD7_Tot_Pre,NBQ_Tot_Pre,MIDAS_Tot_Pre,PSQI_Global_Pre) 
+
+HQ_ConHis_Wilcox<-HQ_ConHis_Wilcox_df %>%
+  map_df(~tidy(wilcox.test(.~ConHis_Diag,data=normative_dat)),.id="Outcome")
+HQ_ConHis_Wilcox
+
+HQ_ConHis_wilcox_es<-HQ_ConHis_Wilcox_df %>%
+  map(.,wilcox_es_ConHis)
+HQ_wilcox_ConHis_es<-ldply(HQ_ConHis_wilcox_es,data.frame)
+HQ_wilcox_ConHis_es$CI<-sprintf("%2.2f-%2.2f",HQ_wilcox_ConHis_es$CI_low,HQ_wilcox_ConHis_es$CI_high)
+HQ_wilcox_ConHis_es$es<-sprintf("%2.2f (%s)",HQ_wilcox_ConHis_es$r_rank_biserial,HQ_wilcox_ConHis_es$CI)
+HQ_wilcox_ConHis_es<-HQ_wilcox_ConHis_es %>% select(c(.id,es))
+HQ_wilcox_ConHis_es
+
+```
+
+#### 8.2.3.3. Analysis (Categorical Variables)
+
+##### 8.2.3.3.1. Clinical Tests
+```{r CTs by concussion history (categorical)}
+
+##Create long format dataframe of categorical clinical test outcomes
+CTs_ConHis_cat_df<-normative_dat %>%
+  select(ConHis_Diag,SCAT5_SAC_Orient_Pre,SCAT5_SAC_Dig_Pre,SCAT5_SAC_Months_Pre,SCAT5_SAC_Con_Pre,SCAT5_BESS_DL_Pre,VOMS_SP:VOMS_NPC,VOMS_Cutoff) %>%
+  gather(key="Test",value="value",SCAT5_SAC_Orient_Pre:VOMS_Cutoff)
+
+##Create dataframe for Chi-square analysis
+CTs_ConHis_df_chisq<-CTs_ConHis_cat_df %>% 
+  filter(Test=="SCAT5_SAC_Dig_Pre"|Test=="VOMS_Cutoff")
+##Create dataframe for Fisher exact analysis
+CTs_ConHis_df_fisher<-CTs_ConHis_cat_df %>%
+  filter(Test!="SCAT5_SAC_Dig_Pre"&Test!="VOMS_Cutoff")
+  
+##Chi-square tests
+CTs_ConHis_chisq<-CTs_ConHis_df_chisq %>%
+  group_by(Test) %>%
+  nest(data=c(ConHis_Diag,value)) %>%
+  mutate(chisq=map(data,~tidy(chisq.test(.$ConHis_Diag,.$value)))) %>%
+  mutate(cramer=map(data,~cramers_v(.$ConHis_Diag,.$value,alternative="two.sided"))) %>%
+  select(-data) %>%
+  unnest(cols=c(chisq))
+CTs_ConHis_chisq
+
+##Fisher exact tests
+CTs_ConHis_fisher<-CTs_ConHis_df_fisher %>%
+  group_by(Test) %>%
+  nest(data=c(ConHis_Diag,value)) %>%
+  mutate(fisher=map(data,~tidy(fisher.test(.$ConHis_Diag,.$value)))) %>%
+  mutate(cramer=map(data,~cramers_v(.$ConHis_Diag,.$value,alternative="two.sided"))) %>%
+  select(-data) %>%
+  unnest(cols=c(fisher))
+CTs_ConHis_fisher
+```
+##### 8.2.3.3.2. Health Questionnaires
+```{r HQs by concussion history (categorical)}
+
+##Create long format dataframe of categorical health questionnaire outcomes
+HQ_ConHis_cat_df<-normative_dat %>%
+  select(ConHis_Diag,PHQ9_Scores,PHQ9_cutoff,GAD7_Scores,GAD7_cutoff,MIDAS_Grade_Pre,PSQI_C1_Pre:PSQI_C7_Pre,PSQI_Sleep_Quality) %>%
+  gather(key="Test",value="value",PHQ9_Scores:PSQI_Sleep_Quality)
+
+##Create dataframe for Chi-square analysis
+HQ_ConHis_df_chisq<-HQ_ConHis_cat_df %>% 
+  filter(Test=="PSQI_C2_Pre")
+##Create dataframe for Fisher exact analysis
+HQ_ConHis_df_fisher<-HQ_ConHis_cat_df %>%
+  filter(Test!="PSQI_C2_Pre")
+  
+##Chi-square tests
+HQ_ConHis_chisq<-HQ_ConHis_df_chisq %>%
+  group_by(Test) %>%
+  nest(data=c(ConHis_Diag,value)) %>%
+  mutate(chisq=map(data,~tidy(chisq.test(.$ConHis_Diag,.$value)))) %>%
+  mutate(cramer=map(data,~cramers_v(.$ConHis_Diag,.$value,alternative="two.sided"))) %>%
+  select(-data) %>%
+  unnest(cols=c(chisq))
+HQ_ConHis_chisq
+
+##Fisher exact tests
+HQ_ConHis_fisher<-HQ_ConHis_df_fisher %>%
+  group_by(Test) %>%
+  nest(data=c(ConHis_Diag,value)) %>%
+  mutate(fisher=map(data,~tidy(fisher.test(.$ConHis_Diag,.$value)))) %>%
+  mutate(cramer=map(data,~cramers_v(.$ConHis_Diag,.$value,alternative="two.sided"))) %>%
+  select(-data) %>%
+  unnest(cols=c(fisher))
+HQ_ConHis_fisher
+```
+#### 8.2.3.4. Correction for Multiple Comparisons
+```{r Multiple comparisons for concussion history}
+
+conhis_pvalues<-c(CT_ConHis_Wilcox$p.value,CT_ConHis_Ttest$p.value,HQ_ConHis_Wilcox$p.value,CTs_ConHis_chisq$p.value,CTs_ConHis_fisher$p.value,HQ_ConHis_chisq$p.value,HQ_ConHis_fisher$p.value)
+
+conhis_pvalues_adj<-p.adjust(conhis_pvalues,method="holm")
+
+conhis_pvalues_df<-data.frame(Outcome=c(CT_ConHis_Wilcox$Outcome,CT_ConHis_Ttest$Outcome,HQ_ConHis_Wilcox$Outcome,CTs_ConHis_chisq$Test,CTs_ConHis_fisher$Test,HQ_ConHis_chisq$Test,HQ_ConHis_fisher$Test),
+                             Original=conhis_pvalues,
+                             Adjusted=conhis_pvalues_adj)
+kable(conhis_pvalues_df)
+
+conhis_pvalues_ft<-flextable(conhis_pvalues_df)
+conhis_pvalues_ft<-add_header_lines(conhis_pvalues_ft,values="Concussion History")
+conhis_pvalues_ft<-colformat_double(conhis_pvalues_ft,digits=3)
+```
+
